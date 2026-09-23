@@ -94,6 +94,7 @@ export class PlayerShip {
     plumeMat.transparent = true;
     plumeMat.depthWrite = false;
     plumeMat.blending = AdditiveBlending;
+    plumeMat.fog = false;
     plumeMat.side = DoubleSide;
     const v = uv().y; // 1 at the nozzle, 0 at the tip
     const n = mx_noise_float(vec3(positionLocal.x.mul(3), positionLocal.y.mul(1.5).add(time.mul(18)), 0))
@@ -122,6 +123,7 @@ export class PlayerShip {
     shieldMat.transparent = true;
     shieldMat.depthWrite = false;
     shieldMat.blending = AdditiveBlending;
+    shieldMat.fog = false;
     const fres = pow(float(1).sub(abs(dot(normalView, positionViewDirection))), 2.2);
     const bands = mx_noise_float(positionLocal.mul(0.9).add(vec3(0, 0, time.mul(0.8))))
       .mul(0.5)
@@ -138,6 +140,7 @@ export class PlayerShip {
     haloMat.transparent = true;
     haloMat.depthWrite = false;
     haloMat.blending = AdditiveBlending;
+    haloMat.fog = false;
     const r = uv().x;
     const ring = smoothstep(0, 0.5, r).mul(smoothstep(1, 0.5, r));
     haloMat.colorNode = vec4(this.accent.mul(ring.mul(this.chargeU.mul(2.5).add(0.08))), 1);
@@ -149,6 +152,7 @@ export class PlayerShip {
     ghostMat.transparent = true;
     ghostMat.depthWrite = false;
     ghostMat.blending = AdditiveBlending;
+    ghostMat.fog = false;
     ghostMat.colorNode = vec4(this.accent.mul(0.9), 1);
     for (let i = 0; i < GHOSTS; i++) {
       const g = new Mesh(parts.hull, ghostMat);

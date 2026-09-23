@@ -4,6 +4,7 @@ import type { World } from '../../sim/world';
 import type { PlayerShip } from '../actors/PlayerShip';
 import type { CameraRig } from '../CameraRig';
 import type { Sea } from '../env/Sea';
+import type { Trench } from '../env/Trench';
 import type { Post } from '../Post';
 import { hueColor } from '../palette';
 import type { LightPool } from './Lights';
@@ -36,6 +37,7 @@ export class FxDirector {
     private readonly particles: Particles,
     private readonly lights: LightPool,
     private readonly sea: Sea,
+    private readonly trench: Trench,
     private ship: PlayerShip | null,
     private readonly screen: () => { w: number; h: number },
   ) {}
@@ -96,6 +98,7 @@ export class FxDirector {
           });
           this.lights.flash(e.x, e.y, 2, col, 2600 * (0.6 + s * 0.35), 55 + s * 4, 0.4 + s * 0.03);
           this.sea.drop(e.x, e.y, 3 + s * 0.7, 0.45 + s * 0.09);
+          this.trench.shockwave(e.x, e.y, 0.25 + s * 0.08);
           this.particles.shock(e.x, e.y, 60 + s * 12);
           this.rig.addTrauma(Math.min(0.35, 0.05 + s * 0.02));
           if (big) {
@@ -124,6 +127,7 @@ export class FxDirector {
               });
             }
             this.sea.drop(e.x, e.y, 22, 2.5);
+            this.trench.shockwave(e.x, e.y, 3);
           }
           break;
         }

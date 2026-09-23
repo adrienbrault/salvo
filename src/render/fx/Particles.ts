@@ -244,6 +244,7 @@ export class Particles {
     mat.transparent = true;
     mat.depthWrite = false;
     mat.blending = AdditiveBlending;
+    mat.fog = false;
     const pAttr = pos.toAttribute();
     const vAttr = vel.toAttribute();
     const cAttr = col.toAttribute();

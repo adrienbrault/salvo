@@ -28,7 +28,7 @@ export function hueColor(h: Hue): Color {
 
 /** Height of the gameplay plane above which nothing is simulated (render-only depth). */
 export const PLAY_Z = 0;
-/** The liquid-metal sea below the battle. */
-export const FLOOR_Z = -26;
+/** The liquid-metal river at the bottom of the trench. */
+export const FLOOR_Z = -34;
 /** World units per second the environment scrolls toward the bottom of the screen. */
 export const SCROLL_SPEED = 16;

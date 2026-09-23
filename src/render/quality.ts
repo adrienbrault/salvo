@@ -8,7 +8,12 @@ export interface Quality {
   resolutionScale: number;
   minResolutionScale: number;
   reflectionScale: number;
+  /** Ripple sim texels (x, y); the domain is 96 × 420 world units. */
   seaSim: [number, number];
+  /** Resolution of each procedural hull texture layer. */
+  hullTexture: number;
+  /** Trench lamps feed the dynamic light pool (needs clustered lighting's budget). */
+  envLamps: boolean;
   particles: number;
   motes: number;
   lights: number;
@@ -27,7 +32,9 @@ export const TIERS: Record<Tier, Quality> = {
     resolutionScale: 1,
     minResolutionScale: 0.6,
     reflectionScale: 0.5,
-    seaSim: [256, 320],
+    seaSim: [128, 560],
+    hullTexture: 512,
+    envLamps: true,
     particles: 65536,
     motes: 14000,
     lights: 256,
@@ -43,7 +50,9 @@ export const TIERS: Record<Tier, Quality> = {
     resolutionScale: 0.8,
     minResolutionScale: 0.5,
     reflectionScale: 0.35,
-    seaSim: [192, 240],
+    seaSim: [96, 420],
+    hullTexture: 512,
+    envLamps: true,
     particles: 32768,
     motes: 7000,
     lights: 96,
@@ -59,7 +68,9 @@ export const TIERS: Record<Tier, Quality> = {
     resolutionScale: 0.9,
     minResolutionScale: 0.5,
     reflectionScale: 0.4,
-    seaSim: [192, 240],
+    seaSim: [96, 420],
+    hullTexture: 256,
+    envLamps: false,
     particles: 24576,
     motes: 5000,
     lights: 12,
@@ -75,7 +86,9 @@ export const TIERS: Record<Tier, Quality> = {
     resolutionScale: 0.75,
     minResolutionScale: 0.45,
     reflectionScale: 0.25,
-    seaSim: [128, 160],
+    seaSim: [64, 280],
+    hullTexture: 256,
+    envLamps: false,
     particles: 12288,
     motes: 2500,
     lights: 6,

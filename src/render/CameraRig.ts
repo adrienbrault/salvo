@@ -19,7 +19,7 @@ export interface Insets {
 export class CameraRig {
   readonly camera: PerspectiveCamera;
   /** Tilt from vertical, radians. */
-  tilt = 0.3;
+  tilt = 0.4;
   private dist = 200;
   private targetY = 0;
   private trauma = 0;
@@ -30,7 +30,7 @@ export class CameraRig {
   private height = 1;
 
   constructor() {
-    this.camera = new PerspectiveCamera(36, 9 / 16, 1, 1200);
+    this.camera = new PerspectiveCamera(50, 9 / 16, 1, 1200);
     this.camera.up.set(0, 1, 0);
   }
 

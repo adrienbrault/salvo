@@ -1,13 +1,14 @@
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { ClusteredLighting } from 'three/addons/lighting/ClusteredLighting.js';
 import { DynamicLighting } from 'three/addons/lighting/DynamicLighting.js';
+import { fog, max, mix, positionView, positionWorld, smoothstep, uniform } from 'three/tsl';
 import {
   AgXToneMapping,
   Color,
   DirectionalLight,
-  Fog,
   HemisphereLight,
-  PCFSoftShadowMap,
+  type Node,
+  PCFShadowMap,
   PMREMGenerator,
   Scene,
   WebGPURenderer,
@@ -19,13 +20,14 @@ import { EnemyLayer } from './actors/Enemies';
 import { PlayerShip } from './actors/PlayerShip';
 import { BulletLayer } from './Bullets';
 import { CameraRig, type Insets } from './CameraRig';
+import { generateHullTextures, type HullTextureSet } from './env/HullTextures';
 import { Sea } from './env/Sea';
-import { Structures } from './env/Structures';
+import { TRENCH, Trench } from './env/Trench';
 import { FxDirector } from './fx/FxDirector';
 import { LightPool } from './fx/Lights';
 import { Particles } from './fx/Particles';
 import { Post } from './Post';
-import { hueColor } from './palette';
+import { FLOOR_Z, hueColor } from './palette';
 import { autoTier, DynamicResolution, type Quality, TIERS, type Tier } from './quality';
 
 export interface RendererOptions {
@@ -34,13 +36,13 @@ export interface RendererOptions {
   tier?: Tier | 'auto';
 }
 
-/** Sector color themes: sea grid, motes, fog, key light. */
+/** Sector color themes: accent lights, fog, key light and hull paint (albedo multiplier). */
 const THEMES = [
-  { accent: 0x2a6cff, fog: 0x03060f, key: 0x9fc4ff },
-  { accent: 0x19d3c5, fog: 0x020a0c, key: 0xaef5ff },
-  { accent: 0xff3d6e, fog: 0x0d0307, key: 0xffb3c6 },
-  { accent: 0xffa31a, fog: 0x0c0703, key: 0xffd9a0 },
-];
+  { accent: 0x2a6cff, fog: 0x03060f, key: 0x9fc4ff, hull: [0.95, 1, 1.1] },
+  { accent: 0x19d3c5, fog: 0x020a0c, key: 0xaef5ff, hull: [0.9, 1.05, 1] },
+  { accent: 0xff3d6e, fog: 0x0d0307, key: 0xffb3c6, hull: [1.15, 0.9, 0.88] },
+  { accent: 0xffa31a, fog: 0x0c0703, key: 0xffd9a0, hull: [1.12, 1, 0.8] },
+] as const;
 
 /**
  * Owns the three.js renderer and every visual subsystem. The app calls `frame()` once per
@@ -55,7 +57,11 @@ export class GameRenderer {
   readonly post: Post;
   readonly fx: FxDirector;
   private readonly sea: Sea;
-  private readonly structures: Structures;
+  private readonly trench: Trench;
+  private readonly fogColor = uniform(new Color(THEMES[0].fog));
+  private readonly hazeColor = uniform(new Color(THEMES[0].fog));
+  private readonly fogNear = uniform(300);
+  private readonly fogFar = uniform(800);
   private readonly enemies: EnemyLayer;
   private readonly bullets: BulletLayer;
   private readonly shots: BulletLayer;
@@ -71,7 +77,7 @@ export class GameRenderer {
   private insets: Insets = { top: 0, bottom: 0 };
   private t = 0;
 
-  private constructor(renderer: WebGPURenderer, quality: Quality, isWebGPU: boolean) {
+  private constructor(renderer: WebGPURenderer, quality: Quality, isWebGPU: boolean, hull: HullTextureSet) {
     this.renderer = renderer;
     this.quality = quality;
     this.isWebGPU = isWebGPU;
@@ -80,31 +86,38 @@ export class GameRenderer {
     renderer.toneMapping = AgXToneMapping;
     renderer.toneMappingExposure = 1.05;
     renderer.shadowMap.enabled = quality.shadows;
-    renderer.shadowMap.type = PCFSoftShadowMap;
+    renderer.shadowMap.type = PCFShadowMap;
     renderer.lighting = quality.clustered
       ? new ClusteredLighting(quality.lights)
       : new DynamicLighting({ maxPointLights: quality.lights });
 
-    scene.background = new Color(THEMES[0]!.fog);
-    scene.fog = new Fog(THEMES[0]!.fog, 190, 420);
+    scene.background = new Color(THEMES[0].fog);
+    // Range fog for the far end of the trench, plus a haze that thickens toward the river.
+    const range = smoothstep(this.fogNear, this.fogFar, positionView.z.negate());
+    const depth = smoothstep(TRENCH.hullZ, FLOOR_Z - 4, positionWorld.z).mul(0.18);
+    (scene as Scene & { fogNode: Node }).fogNode = fog(
+      mix(this.hazeColor, this.fogColor, range),
+      max(range, depth),
+    );
     const pmrem = new PMREMGenerator(renderer);
     scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     scene.environmentIntensity = 0.35;
 
-    scene.add(new HemisphereLight(0x4a6cff, 0x05060a, 0.5));
-    this.key = new DirectionalLight(THEMES[0]!.key, 1.6);
-    this.key.position.set(-40, 60, 120);
-    this.key.target.position.set(0, 0, -34);
+    scene.add(new HemisphereLight(0x4a6cff, 0x05060a, 0.22));
+    this.key = new DirectionalLight(THEMES[0].key, 2.2);
+    // Low sun from the upper left: long shadows across the deck and down into the trench.
+    this.key.position.set(-130, 100, 70);
+    this.key.target.position.set(0, 20, -10);
     if (quality.shadows) {
       this.key.castShadow = true;
       const sc = this.key.shadow.camera;
-      sc.left = -90;
-      sc.right = 90;
-      sc.top = 120;
-      sc.bottom = -120;
+      sc.left = -190;
+      sc.right = 190;
+      sc.top = 190;
+      sc.bottom = -190;
       sc.near = 10;
       sc.far = 400;
-      this.key.shadow.mapSize.set(1024, 1024);
+      this.key.shadow.mapSize.set(2048, 2048);
       this.key.shadow.bias = -0.0005;
     }
     scene.add(this.key, this.key.target);
@@ -113,10 +126,10 @@ export class GameRenderer {
       simSize: quality.seaSim,
       reflectionScale: quality.reflectionScale,
     });
-    this.structures = new Structures(scene);
+    this.trench = new Trench(scene, hull, { lamps: quality.envLamps, shadows: quality.shadows });
     this.enemies = new EnemyLayer(scene);
     this.bullets = new BulletLayer(3000);
-    this.shots = new BulletLayer(800);
+    this.shots = new BulletLayer(800, 0.4);
     scene.add(this.bullets.mesh, this.shots.mesh);
     this.particles = new Particles(renderer, scene, quality.particles, quality.motes);
     this.lights = new LightPool(scene, quality.lights);
@@ -131,10 +144,16 @@ export class GameRenderer {
     this.ship.addGhostsTo(scene);
     this.ship.group.visible = false;
     this.dynRes = new DynamicResolution(quality.resolutionScale, quality.minResolutionScale);
-    this.fx = new FxDirector(this.rig, this.post, this.particles, this.lights, this.sea, this.ship, () => ({
-      w: this.width,
-      h: this.height,
-    }));
+    this.fx = new FxDirector(
+      this.rig,
+      this.post,
+      this.particles,
+      this.lights,
+      this.sea,
+      this.trench,
+      this.ship,
+      () => ({ w: this.width, h: this.height }),
+    );
     this.setTheme(0);
   }
 
@@ -155,7 +174,10 @@ export class GameRenderer {
       q.lights = Math.min(q.lights, 16);
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio));
-    const gr = new GameRenderer(renderer, q, isWebGPU);
+    // Stencils on the hull use the UI font: make sure it is loaded before painting.
+    await document.fonts?.load('700 32px "Chakra Petch"').catch(() => undefined);
+    const hull = generateHullTextures(q.hullTexture, Math.min(8, renderer.getMaxAnisotropy()));
+    const gr = new GameRenderer(renderer, q, isWebGPU, hull);
     await gr.warmup();
     return gr;
   }
@@ -166,6 +188,10 @@ export class GameRenderer {
     this.insets = insets;
     this.renderer.setSize(width, height, false);
     this.rig.fit(width, height, insets);
+    // Fog starts just beyond the play plane, whatever distance the camera had to back off to.
+    const d = this.rig.camera.position.length();
+    this.fogNear.value = d + 40;
+    this.fogFar.value = d + 520;
   }
 
   get size(): { w: number; h: number; insets: Insets } {
@@ -175,11 +201,11 @@ export class GameRenderer {
   setTheme(sector: number): void {
     const th = THEMES[sector % THEMES.length]!;
     const accent = new Color(th.accent);
-    this.sea.setTheme(accent);
-    this.structures.setTheme(accent);
+    this.trench.setTheme(accent, new Color(...th.hull));
     this.particles.setTheme(accent);
     (this.scene.background as Color).setHex(th.fog);
-    (this.scene.fog as Fog).color.setHex(th.fog);
+    this.fogColor.value.setHex(th.fog);
+    this.hazeColor.value.setHex(th.fog).lerp(accent, 0.07);
     this.key.color.setHex(th.key);
   }
 
@@ -227,7 +253,9 @@ export class GameRenderer {
 
     this.rig.update(dt, world ? px : Math.sin(t * 0.2) * 20);
     this.sea.update(dt);
-    this.structures.update(dt, t);
+    this.trench.update(dt, t, this.lights, p?.alive ? { x: px, y: py } : null);
+    this.trench.setEnergy(world?.gauge ?? 1);
+    this.trench.setAlert(world?.spec.kind === 'boss');
 
     if (world) {
       this.enemies.update(world, alpha, t);
@@ -248,7 +276,7 @@ export class GameRenderer {
       const stride = Math.max(1, Math.ceil(items.length / Math.max(1, budget)));
       for (let i = 0; i < items.length; i += stride) {
         const b = items[i]!;
-        this.lights.add(b.x, b.y, 0, hueColor(b.hue), 380, 42);
+        this.lights.add(b.x, b.y, 0, hueColor(b.hue), 520, 56);
       }
       for (const e of world.enemies.items) {
         if (e.heavy) this.lights.add(e.x, e.y, 3, hueColor(e.hue), 1500, 60);

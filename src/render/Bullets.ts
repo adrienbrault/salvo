@@ -52,7 +52,14 @@ export class BulletLayer {
   private readonly colors: InstancedBufferAttribute;
   private readonly shapes: InstancedBufferAttribute;
 
-  constructor(readonly capacity: number) {
+  /**
+   * @param gain brightness multiplier: the player's own shots are dimmed so the danger
+   *   (enemy bullets) always reads first.
+   */
+  constructor(
+    readonly capacity: number,
+    private readonly gain = 1,
+  ) {
     const geo = new PlaneGeometry(2, 2);
     this.colors = new InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
     this.shapes = new InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
@@ -65,6 +72,7 @@ export class BulletLayer {
     mat.transparent = true;
     mat.depthWrite = false;
     mat.blending = AdditiveBlending;
+    mat.fog = false;
     const color = attribute('aColor', 'vec4');
     const shape = attribute('aShape', 'vec4');
     const p = uv().sub(0.5).mul(2);
@@ -129,7 +137,7 @@ export class BulletLayer {
       c[j] = col.r;
       c[j + 1] = col.g;
       c[j + 2] = col.b;
-      c[j + 3] = vis;
+      c[j + 3] = vis * this.gain;
       s[j] = shape.core;
       s[j + 1] = shape.body;
       s[j + 2] = shape.glow;

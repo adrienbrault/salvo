@@ -29,7 +29,6 @@ import {
   RenderTarget,
   type Scene,
   Vector2,
-  Vector3,
   Vector4,
   type WebGPURenderer,
 } from 'three/webgpu';
@@ -38,8 +37,8 @@ import { FLOOR_Z, SCROLL_SPEED } from '../palette';
 const MAX_DROPS = 24;
 const SIM_DT = 1 / 60;
 
-/** World-space rectangle covered by the ripple simulation. */
-const DOMAIN = { x0: -160, y0: -140, w: 320, h: 400 };
+/** World-space rectangle covered by the ripple simulation (the trench floor, plus margin). */
+const DOMAIN = { x0: -48, y0: -150, w: 96, h: 420 };
 
 export interface SeaOptions {
   simSize: [number, number];
@@ -47,16 +46,14 @@ export interface SeaOptions {
 }
 
 /**
- * Liquid-metal sea under the battle:
+ * Liquid-metal river at the bottom of the trench:
  *  - a GPU wave-equation heightfield (ping-pong render targets, works on WebGPU and WebGL2)
  *    fed by explosions and the ship's engine downwash, advected by the scroll;
  *  - planar reflections (`reflector`) distorted by the ripples;
- *  - PBR metal lit by every dynamic light in the scene;
- *  - a faint scrolling energy grid tinted by the sector theme.
+ *  - PBR metal lit by every dynamic light in the scene.
  */
 export class Sea {
   readonly mesh: Mesh;
-  readonly theme = uniform(new Vector3(0.16, 0.42, 1));
   private readonly rtA: RenderTarget;
   private readonly rtB: RenderTarget;
   private readonly simTex;
@@ -136,19 +133,10 @@ export class Sea {
     const refl = reflector({ resolutionScale: opts.reflectionScale });
     refl.uvNode = refl.uvNode!.add(nWorld.xy.mul(0.09));
 
-    // Energy grid lines every 16 m, with pulses running along them.
-    const g = flow.div(16);
-    const gl = g.fract().sub(0.5).abs();
-    const line = smoothstep(0.03, 0, gl.x.min(gl.y));
-    const pulse = smoothstep(0.92, 1, g.y.mul(0.25).sub(time.mul(0.35)).fract())
-      .mul(3)
-      .add(0.35);
-    const grid = this.theme.mul(line.mul(pulse).mul(0.22));
-
     const mat = new MeshStandardNodeMaterial({ color: new Color(0x06080d), metalness: 1, roughness: 0.2 });
     mat.normalNode = transformNormalToView(nWorld);
     mat.roughnessNode = float(0.12).add(swellX.abs().mul(0.25));
-    mat.emissiveNode = refl.rgb.mul(0.6).add(grid);
+    mat.emissiveNode = refl.rgb.mul(0.6);
     // Reflections come from the reflector; the studio env map would paint grey blotches.
     mat.envMapIntensity = 0;
 
@@ -199,10 +187,6 @@ export class Sea {
     this.renderer.setRenderTarget(null);
     this.heightTex.value = write.texture;
     this.flip = !this.flip;
-  }
-
-  setTheme(color: Color): void {
-    this.theme.value.set(color.r, color.g, color.b);
   }
 
   get domain(): typeof DOMAIN {
