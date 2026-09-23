@@ -11,6 +11,7 @@ import {
   mx_noise_float,
   normalMap,
   normalView,
+  parallaxDirection,
   positionViewDirection,
   positionWorld,
   pow,
@@ -49,7 +50,7 @@ import {
 } from 'three/webgpu';
 import { Rng } from '../../sim/rng';
 import type { LightPool } from '../fx/Lights';
-import { FLOOR_Z, SCROLL_SPEED } from '../palette';
+import { AO_LAYER, FLOOR_Z, SCROLL_SPEED } from '../palette';
 import { HullBuilder, type Surf } from './HullBuilder';
 import { type HullTextureSet, LAYER } from './HullTextures';
 
@@ -130,12 +131,16 @@ interface Materials {
 /** Features that must line up across segments (so they are fixed per trench, not per segment). */
 interface SideConfig {
   pipes: { z: number; r: number }[];
+  /** Deck conduits running along the trench in the gaps between structure columns. */
+  conduits: { side: 1 | -1; x: number; kind: 'pipes' | 'channel' | 'rail' }[];
 }
 
 export interface TrenchOptions {
   /** Feed environment lamps into the dynamic light pool (needs a large pool). */
   lamps: boolean;
   shadows: boolean;
+  /** Parallax offset mapping on the hull (one extra dependent texture read). */
+  parallax: boolean;
 }
 
 // ── Emissive-only geometry: beacons and light bars ─────────────────────────────
@@ -221,6 +226,7 @@ class SegmentBuilder {
     const hull = new Mesh(this.hb.build(), this.m.hull);
     hull.castShadow = this.m.shadows;
     hull.receiveShadow = true;
+    hull.layers.enable(AO_LAYER);
     this.group.add(hull);
     const beacons = this.bb.build();
     if (beacons) this.group.add(new Mesh(beacons, this.m.beacon));
@@ -423,6 +429,11 @@ class SegmentBuilder {
       y += len + r.float(2, 7);
     }
 
+    for (const c of this.cfg.conduits) if (c.side === s) this.conduit(s, c.x, c.kind);
+    // Clusters of small greebles: a dense, shadow-catching surface instead of flat plating.
+    for (let i = 0; i < 7; i++)
+      this.scatter(s, r.float(56, 215), r.float(0, SEG), r.float(4, 11), r.int(8, 20));
+
     // Far deck: a grid of cells filled with towers, domes, radiators, masts, dishes, turrets.
     const bands: [number, number][] = [
       [66, 90],
@@ -438,6 +449,96 @@ class SegmentBuilder {
         this.cell(s, x0, x1, y0, y1, bi);
       }
     });
+  }
+
+  /** Trench-long conduit (identical in every segment so it runs unbroken to the horizon). */
+  private conduit(s: 1 | -1, x: number, kind: 'pipes' | 'channel' | 'rail'): void {
+    const z = TRENCH.hullZ;
+    if (kind === 'pipes') {
+      for (const [dx, r] of [
+        [-0.9, 0.55],
+        [0.6, 0.8],
+      ] as const) {
+        const cx = s * (x + dx);
+        this.hb.tube([cx, 0, z + r], [cx, SEG, z + r], r, 10, { layer: LAYER.PLATES, tile: 3 });
+      }
+      for (let y = 8; y < SEG; y += 16) {
+        this.sbox(
+          s,
+          x - 1.8,
+          x + 1.8,
+          y,
+          y + 0.8,
+          z,
+          z + 1.9,
+          { layer: LAYER.HAZARD, tile: 3 },
+          { nz: null },
+        );
+      }
+    } else if (kind === 'channel') {
+      this.sbox(
+        s,
+        x - 1.6,
+        x + 1.6,
+        0,
+        SEG,
+        z,
+        z + 0.7,
+        { layer: LAYER.RIBS, tile: 3 },
+        {
+          pz: { layer: LAYER.GRILLE, tile: 3 },
+          nz: null,
+          py: null,
+          ny: null,
+        },
+      );
+    } else {
+      this.sbox(
+        s,
+        x - 1,
+        x + 1,
+        0,
+        SEG,
+        z,
+        z + 0.45,
+        { layer: LAYER.PLATES, tile: 4 },
+        { nz: null, py: null, ny: null },
+      );
+      const bx = s > 0 ? x : -x;
+      this.bb.bar(bx - 0.15, 0, z + 0.45, bx + 0.15, SEG, z + 0.6, B_FLOW);
+    }
+  }
+
+  /** A cluster of small boxes around (distance x, y). */
+  private scatter(s: 1 | -1, x: number, y: number, radius: number, count: number): void {
+    const r = this.rng;
+    const z = TRENCH.hullZ;
+    const top = r.pick([LAYER.GRILLE, LAYER.PLATES, LAYER.PANELS]);
+    for (let i = 0; i < count; i++) {
+      const w = r.chance(0.3) ? r.float(3, 7) : r.float(0.6, 2.8);
+      const d = r.chance(0.3) ? r.float(3, 7) : r.float(0.6, 2.8);
+      const h = r.chance(0.15) ? r.float(1.6, 3.2) : r.float(0.25, 1.3);
+      const cx = x + r.float(-radius, radius);
+      const cy = Math.min(SEG - d, Math.max(0, y + r.float(-radius, radius)));
+      if (cx - w / 2 < TRENCH.lipX + TRENCH.lipW + 1) continue;
+      const lit = r.chance(0.12);
+      this.sbox(
+        s,
+        cx - w / 2,
+        cx + w / 2,
+        cy,
+        cy + d,
+        z,
+        z + h,
+        { layer: LAYER.GREEBLE, tile: 4 },
+        {
+          pz: { layer: top, tile: r.float(3, 6) },
+          nz: null,
+          ...(lit ? { in: { layer: LAYER.STRIPS, tile: h * 2, v0: 0.75 - (z + h / 2) / (h * 2) } } : {}),
+        },
+      );
+      if (r.chance(0.06)) this.bb.add(s * cx, cy + d / 2, z + h + 0.25, 0.22, B_RED, r.float(0, 6));
+    }
   }
 
   private wallPanels(s: 1 | -1, xB: number, zB: number, xT: number, zT: number, kinds: Surf[]): void {
@@ -701,6 +802,7 @@ class SegmentBuilder {
     const tilt = new Mesh(b.build(), this.m.hull);
     tilt.rotation.x = 0.9;
     tilt.castShadow = this.m.shadows;
+    tilt.layers.enable(AO_LAYER);
     head.add(tilt);
     this.group.add(head);
     this.bb.add(x, y, z + 3.4, 0.25, B_RED, this.rng.float(0, 6));
@@ -746,6 +848,7 @@ class SegmentBuilder {
       b.tube([bx, 13, 1.3], [bx, 14.6, 1.3], 0.72, 10, { layer: LAYER.PLATES, tile: 2 });
     }
     const head = new Mesh(b.build(), this.m.hull);
+    head.layers.enable(AO_LAYER);
     head.position.set(x, y, z + 1.6);
     head.castShadow = this.m.shadows;
     this.group.add(head);
@@ -881,8 +984,13 @@ export class Trench {
       shadows: opts.shadows,
     };
 
-    const cfg: SideConfig = { pipes: [] };
+    const cfg: SideConfig = { pipes: [], conduits: [] };
     cfg.pipes.push({ z: -24, r: 1.1 }, { z: -29.5, r: 0.8 });
+    for (const side of [-1, 1] as const) {
+      for (const x of [64, 92, 126, 168]) {
+        cfg.conduits.push({ side, x, kind: this.rng.pick(['pipes', 'channel', 'rail'] as const) });
+      }
+    }
 
     const segments: Segment[] = [];
     for (let i = 0; i < POOL; i++) {
@@ -903,6 +1011,7 @@ export class Trench {
     this.cars.instanceMatrix.setUsage(DynamicDrawUsage);
     this.cars.frustumCulled = false;
     this.cars.castShadow = opts.shadows;
+    this.cars.layers.enable(AO_LAYER);
     this.root.add(this.cars);
     for (const side of [-1, 1] as const) {
       this.trains.push({ side, y: 0, speed: 0, wait: this.rng.float(0.5, 3), on: false });
@@ -915,7 +1024,11 @@ export class Trench {
   private hullMaterial(tex: HullTextureSet): MeshStandardNodeMaterial {
     const info = attribute<'vec4'>('aInfo', 'vec4');
     const layer = info.x;
-    const st = uv();
+    const st0 = uv();
+    // Offset parallax (height lives in ORM alpha): relief shifts toward the viewer.
+    const view = parallaxDirection as Node<'vec3'>;
+    const height = texture(tex.orm, st0).depth(layer).a;
+    const st: Node<'vec2'> = this.opts.parallax ? st0.add(view.xy.mul(height.sub(0.5).mul(0.03))) : st0;
     const alb = texture(tex.albedo, st).depth(layer);
     const orm = texture(tex.orm, st).depth(layer);
     const nrm = texture(tex.normal, st).depth(layer);
@@ -924,12 +1037,18 @@ export class Trench {
     const mat = new MeshStandardNodeMaterial();
     // Light pools along the trench; the deck far from it sinks into the night.
     const falloff = mix(float(0.3), float(1), smoothstep(230, 60, abs(positionWorld.x)));
-    mat.colorNode = alb.rgb.mul(info.z).mul(this.tint).mul(falloff);
+    // Macro variation at a frequency unrelated to the tiles hides repetition (UVs are
+    // world-aligned, so it is continuous across pieces); micro pitting breaks up highlights.
+    const macro = texture(tex.macro, st0.mul(0.113));
+    const micro = texture(tex.macro, st0.mul(4.7)).b;
+    const grime = smoothstep(0.35, 0.9, macro.r).mul(0.45).add(macro.g.mul(0.12));
+    const tone = macro.a.mul(0.3).add(0.85);
+    mat.colorNode = alb.rgb.mul(info.z).mul(this.tint).mul(falloff).mul(float(1).sub(grime)).mul(tone);
     mat.aoNode = orm.r;
-    mat.roughnessNode = orm.g;
+    mat.roughnessNode = orm.g.add(grime.mul(0.3)).add(micro.sub(0.5).mul(0.16)).clamp(0.04, 1);
     mat.metalnessNode = orm.b;
     mat.normalNode = normalMap(nrm);
-    mat.envMapIntensity = 0.35;
+    mat.envMapIntensity = 1;
 
     // Warm interior light: windows (10×4 grid per tile) switch off now and then.
     const cell = floor(st.mul(vec2(10, 4)));

@@ -23,6 +23,8 @@ export interface Quality {
   chromatic: boolean;
   grain: boolean;
   shadows: boolean;
+  smaa: boolean;
+  ao: boolean;
 }
 
 export const TIERS: Record<Tier, Quality> = {
@@ -43,6 +45,8 @@ export const TIERS: Record<Tier, Quality> = {
     chromatic: true,
     grain: true,
     shadows: true,
+    smaa: true,
+    ao: true,
   },
   high: {
     tier: 'high',
@@ -61,6 +65,8 @@ export const TIERS: Record<Tier, Quality> = {
     chromatic: true,
     grain: true,
     shadows: false,
+    smaa: true,
+    ao: true,
   },
   medium: {
     tier: 'medium',
@@ -79,6 +85,8 @@ export const TIERS: Record<Tier, Quality> = {
     chromatic: true,
     grain: false,
     shadows: false,
+    smaa: true,
+    ao: false,
   },
   low: {
     tier: 'low',
@@ -97,6 +105,8 @@ export const TIERS: Record<Tier, Quality> = {
     chromatic: false,
     grain: false,
     shadows: false,
+    smaa: false,
+    ao: false,
   },
 };
 

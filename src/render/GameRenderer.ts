@@ -1,4 +1,3 @@
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { ClusteredLighting } from 'three/addons/lighting/ClusteredLighting.js';
 import { DynamicLighting } from 'three/addons/lighting/DynamicLighting.js';
 import { fog, max, mix, positionView, positionWorld, smoothstep, uniform } from 'three/tsl';
@@ -9,8 +8,8 @@ import {
   HemisphereLight,
   type Node,
   PCFShadowMap,
-  PMREMGenerator,
   Scene,
+  Vector3,
   WebGPURenderer,
 } from 'three/webgpu';
 import { CHASSIS, type ChassisDef } from '../content/chassis';
@@ -22,6 +21,7 @@ import { BulletLayer } from './Bullets';
 import { CameraRig, type Insets } from './CameraRig';
 import { generateHullTextures, type HullTextureSet } from './env/HullTextures';
 import { Sea } from './env/Sea';
+import { createSpaceEnvironment } from './env/SpaceEnvironment';
 import { TRENCH, Trench } from './env/Trench';
 import { FxDirector } from './fx/FxDirector';
 import { LightPool } from './fx/Lights';
@@ -43,6 +43,10 @@ const THEMES = [
   { accent: 0xff3d6e, fog: 0x0d0307, key: 0xffb3c6, hull: [1.15, 0.9, 0.88] },
   { accent: 0xffa31a, fog: 0x0c0703, key: 0xffd9a0, hull: [1.12, 1, 0.8] },
 ] as const;
+
+/** Key light ("sun"): low, from the upper left, so shadows run long across the deck. */
+const KEY_POS = new Vector3(-130, 100, 70);
+const KEY_TARGET = new Vector3(0, 20, -10);
 
 /**
  * Owns the three.js renderer and every visual subsystem. The app calls `frame()` once per
@@ -99,15 +103,13 @@ export class GameRenderer {
       mix(this.hazeColor, this.fogColor, range),
       max(range, depth),
     );
-    const pmrem = new PMREMGenerator(renderer);
-    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environmentIntensity = 0.35;
+    scene.environment = createSpaceEnvironment(renderer, KEY_POS.clone().sub(KEY_TARGET));
+    scene.environmentIntensity = 1;
 
-    scene.add(new HemisphereLight(0x4a6cff, 0x05060a, 0.22));
-    this.key = new DirectionalLight(THEMES[0].key, 2.2);
-    // Low sun from the upper left: long shadows across the deck and down into the trench.
-    this.key.position.set(-130, 100, 70);
-    this.key.target.position.set(0, 20, -10);
+    scene.add(new HemisphereLight(0x4a6cff, 0x05060a, 0.15));
+    this.key = new DirectionalLight(THEMES[0].key, 1.5);
+    this.key.position.copy(KEY_POS);
+    this.key.target.position.copy(KEY_TARGET);
     if (quality.shadows) {
       this.key.castShadow = true;
       const sc = this.key.shadow.camera;
@@ -126,7 +128,11 @@ export class GameRenderer {
       simSize: quality.seaSim,
       reflectionScale: quality.reflectionScale,
     });
-    this.trench = new Trench(scene, hull, { lamps: quality.envLamps, shadows: quality.shadows });
+    this.trench = new Trench(scene, hull, {
+      lamps: quality.envLamps,
+      shadows: quality.shadows,
+      parallax: quality.tier === 'ultra' || quality.tier === 'high',
+    });
     this.enemies = new EnemyLayer(scene);
     this.bullets = new BulletLayer(3000);
     this.shots = new BulletLayer(800, 0.4);
@@ -138,6 +144,8 @@ export class GameRenderer {
       bloom: quality.bloom,
       chromatic: quality.chromatic,
       grain: quality.grain,
+      smaa: quality.smaa,
+      ao: quality.ao,
     });
     this.ship = new PlayerShip();
     scene.add(this.ship.group);
@@ -176,7 +184,7 @@ export class GameRenderer {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio));
     // Stencils on the hull use the UI font: make sure it is loaded before painting.
     await document.fonts?.load('700 32px "Chakra Petch"').catch(() => undefined);
-    const hull = generateHullTextures(q.hullTexture, Math.min(8, renderer.getMaxAnisotropy()));
+    const hull = await generateHullTextures(q.hullTexture, Math.min(8, renderer.getMaxAnisotropy()));
     const gr = new GameRenderer(renderer, q, isWebGPU, hull);
     await gr.warmup();
     return gr;

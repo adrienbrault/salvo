@@ -30,5 +30,7 @@ export function hueColor(h: Hue): Color {
 export const PLAY_Z = 0;
 /** The liquid-metal river at the bottom of the trench. */
 export const FLOOR_Z = -34;
+/** Camera layer for geometry that receives/casts ambient occlusion (the hull). */
+export const AO_LAYER = 2;
 /** World units per second the environment scrolls toward the bottom of the screen. */
 export const SCROLL_SPEED = 16;
