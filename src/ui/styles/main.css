@@ -1,0 +1,79 @@
+@import "@fontsource/chakra-petch/400.css";
+@import "@fontsource/chakra-petch/600.css";
+@import "@fontsource/chakra-petch/700.css";
+@import "@fontsource/rajdhani/500.css";
+@import "@fontsource/rajdhani/700.css";
+
+:root {
+  color-scheme: dark;
+  --bg: #05060d;
+  --ink: #eef2ff;
+  --muted: #8a93b8;
+  --blue: #4dabff;
+  --red: #ff4d6d;
+  --gold: #ffd23f;
+  --cyan: #4de8ff;
+  --panel: rgba(12, 16, 32, 0.72);
+  --line: rgba(140, 170, 255, 0.18);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --font-ui: "Chakra Petch", "Rajdhani", system-ui, sans-serif;
+  --font-num: "Rajdhani", "Chakra Petch", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  touch-action: none;
+}
+
+#gl {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  outline: none;
+}
+
+#ui {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.dev-hud {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font: 600 14px var(--font-num);
+  color: #fff;
+  text-shadow: 0 1px 3px #000;
+}
+.boot-error {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+}
