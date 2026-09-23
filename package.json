@@ -1,0 +1,32 @@
+{
+  "name": "salvo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Salvo — shoot'em up roguelike à la Balatro (Bun + Three.js WebGPU)",
+  "scripts": {
+    "dev": "bun --hot scripts/dev.ts",
+    "build": "bun scripts/build.ts",
+    "preview": "bun scripts/preview.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "bun test",
+    "check": "bun run typecheck && bun run lint && bun test"
+  },
+  "dependencies": {
+    "@fontsource/chakra-petch": "^5.3.0",
+    "@fontsource/rajdhani": "^5.3.0",
+    "@preact/signals": "^2.11.2",
+    "preact": "^10.29.8",
+    "three": "0.186.0",
+    "zzfx": "^1.3.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
+    "@types/bun": "^1.4.2",
+    "@types/three": "0.186.0",
+    "@webgpu/types": "^0.1.74",
+    "typescript": "^7.0.2"
+  }
+}
