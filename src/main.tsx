@@ -80,6 +80,9 @@ async function boot(): Promise<void> {
 
   render(<App />, appRoot);
 
+  const scheduler = (globalThis as { scheduler?: { yield?: unknown } }).scheduler;
+  const restoreFrames =
+    params.has('rafshim') || typeof scheduler?.yield === 'function' ? null : installRafShim();
   let gr: GameRenderer;
   try {
     gr = await GameRenderer.create({
@@ -94,6 +97,8 @@ async function boot(): Promise<void> {
     console.error(err);
     ui.bootError.value = err instanceof Error ? err.message : String(err);
     return;
+  } finally {
+    restoreFrames?.();
   }
   ui.backend.value = { api: gr.isWebGPU ? 'WebGPU' : 'WebGL 2', tier: gr.quality.tier };
 
