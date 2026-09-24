@@ -166,6 +166,14 @@ export class GameRenderer {
     scene.add(this.ship.group);
     this.ship.addGhostsTo(scene);
     this.ship.group.visible = false;
+    this.sea.unreflected.push(
+      this.enemies.group,
+      this.bullets.mesh,
+      this.shots.mesh,
+      this.particles.sprite,
+      this.ship.group,
+      ...this.ship.ghosts,
+    );
     this.dynRes = new DynamicResolution(quality.minResolutionScale);
     this.fx = new FxDirector(
       this.rig,

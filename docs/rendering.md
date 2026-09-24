@@ -18,6 +18,7 @@ A pipeline compile stalls a frame for 50–500 ms, so none happens during play: 
 
 - Gameplay reads first: bullets, the ship's hitbox and enemies stay the brightest, most saturated things on screen. Floors and walls stay dark; emissive environment detail is thin (lines, dots, windows), never large bright areas behind the field.
 - Three things must never be confused, so each has one look: enemy bullets are the only glowing dots with a white-hot core and a dark rim (premultiplied blending in `Bullets.ts` cuts them out of whatever is behind); enemies are solid, lit ships whose glow parts stay below bullet brightness (a mine is spikes round a small glowing heart); effects and scenery (fire, embers, sparks on the deck) stay dimmer than both.
+- The floor never mirrors gameplay (`Sea.unreflected`), and under the field it reflects nothing: ghost bullets and ships read as more things to dodge. Reflections stay along the banks.
 - HDR colour: palette entries are sRGB hex (`palette.ts`); anything meant to bloom goes above 1. AgX tone mapping, then SMAA, then grain (see the header of `Post.ts` for the chain).
 - Additive and unlit materials set `fog = false` — the custom fog node would tint them.
 - Hull meshes enable `AO_LAYER`: GTAO runs on a half-resolution pre-pass of that layer only, so bullets and emissives never get darkened.

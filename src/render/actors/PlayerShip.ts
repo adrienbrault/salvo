@@ -51,7 +51,7 @@ export class PlayerShip {
   private readonly shield: Mesh;
   private readonly halo: Mesh;
   private readonly hitCore: Mesh;
-  private readonly ghosts: Mesh[] = [];
+  readonly ghosts: Mesh[] = [];
   private readonly ghostPos: { x: number; y: number; a: number }[] = [];
   private bank = 0;
   private ghostT = 0;

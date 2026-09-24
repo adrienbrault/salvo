@@ -22,7 +22,7 @@ import {
   vec3,
   vec4,
 } from 'three/tsl';
-import type { Node } from 'three/webgpu';
+import type { Node, Object3D } from 'three/webgpu';
 import {
   Color,
   HalfFloatType,
@@ -97,6 +97,11 @@ export class Sea {
   private readonly glow = uniform(new Color(1, 0.35, 0.08));
   private pending: Vector4[] = [];
   private reflective = true;
+  /**
+   * What the floor never mirrors: ghost bullets and ships under the field read as more things
+   * to dodge. Hidden for the reflection's render only.
+   */
+  readonly unreflected: Object3D[] = [];
   private acc = 0;
   private flip = false;
 
@@ -189,7 +194,19 @@ export class Sea {
     // no switch for it, so gate its per-frame update).
     const base = refl.reflector as { updateBefore: (frame: unknown) => unknown };
     const updateReflection = base.updateBefore.bind(base);
-    base.updateBefore = (frame) => (this.reflective ? updateReflection(frame) : undefined);
+    base.updateBefore = (frame) => {
+      if (!this.reflective) return undefined;
+      const hidden = this.unreflected.filter((o) => o.visible);
+      for (const o of hidden) o.visible = false;
+      try {
+        return updateReflection(frame);
+      } finally {
+        for (const o of hidden) o.visible = true;
+      }
+    };
+    // Under the field the floor is a plain dark background; the walls' reflections stay along
+    // the banks (the bed runs to |x| = 31).
+    const banks = smoothstep(18, 29, abs(positionWorld.x));
 
     // Lava: crust cracks where two drifting noise layers cross mid-value; pools where both are high.
     const tex = opts.noise;
@@ -233,7 +250,7 @@ export class Sea {
       char,
     );
     mat.emissiveNode = refl.rgb
-      .mul(solid.oneMinus().mul(0.6))
+      .mul(solid.oneMinus().mul(banks).mul(0.6))
       .add(molten.mul(this.lava))
       .add(clouds.mul(this.cloud))
       .mul(clean)
