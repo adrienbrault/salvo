@@ -10,12 +10,17 @@ How to see the game while working on it: in Chrome (automated or not) and on a p
 | `?webgl` | Force the WebGL2 backend. |
 | `?tier=ultra\|high\|medium\|low` | Force a quality tier instead of auto-detection. |
 | `?rafshim` | Drive `requestAnimationFrame` from a MessageChannel — required when the tab is hidden or its window occluded. |
+| `?fps` | Overlay: frame rate, average and worst frame time, tier, backend, canvas size and dynamic-resolution factor. |
 
 ## Hidden windows
 
 An automated Chrome window is usually hidden (`document.visibilityState === 'hidden'`), and a hidden tab never fires `requestAnimationFrame`. The game then never finishes booting (three's WebGL backend polls pipeline compilation with rAF) and the loop never ticks. Load pages with `?rafshim`.
 
-Timers are throttled too: boot (hull textures are painted with `setTimeout` yields) takes ~20–30 s instead of ~2 s, and frame timings measured in a hidden tab mean nothing. Wait for `window.salvo` before scripting.
+Hidden windows are also throttled (timers, and the whole process when macOS naps an occluded Chrome): boot can take 20 s to a few minutes, and wall-clock frame timings mean little. Wait for `window.salvo` with separate short polls — a script spinning on `requestAnimationFrame` under the shim starves boot.
+
+## Measuring GPU cost
+
+Frame rate in a hidden window is unreliable, but GPU timestamps are not. On WebGPU, `salvo.gr.renderer.backend.trackTimestamp = true`, then after each of a few frames `await salvo.gr.renderer.resolveTimestampsAsync('render')` returns that frame's GPU milliseconds. Resolve one at a time (overlapping resolves hang the query pool), run long experiments as an in-page async task that writes results to `window` and poll it, and compare by toggling one thing at a time (`gr.key.castShadow`, `gr.sea.reflective`, `gr.trench.root.visible`, `renderer.setPixelRatio`).
 
 ## The `salvo` debug handle
 

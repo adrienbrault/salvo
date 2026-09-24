@@ -14,10 +14,11 @@ A pipeline compile stalls a frame for 50–500 ms, so every pipeline exists by t
 ## Look and readability
 
 - Gameplay reads first: bullets, the ship's hitbox and enemies stay the brightest, most saturated things on screen. Floors and walls stay dark; emissive environment detail is thin (lines, dots, windows), never large bright areas behind the field.
+- Three things must never be confused, so each has one look: enemy bullets are the only glowing dots with a white-hot core and a dark rim (premultiplied blending in `Bullets.ts` cuts them out of whatever is behind); enemies are solid, lit ships whose glow parts stay below bullet brightness (a mine is spikes round a small glowing heart); effects and scenery (fire, embers, sparks on the deck) stay dimmer than both.
 - HDR colour: palette entries are sRGB hex (`palette.ts`); anything meant to bloom goes above 1. AgX tone mapping, then SMAA, then grain (see the header of `Post.ts` for the chain).
 - Additive and unlit materials set `fog = false` — the custom fog node would tint them.
 - Hull meshes enable `AO_LAYER`: GTAO runs on a half-resolution pre-pass of that layer only, so bullets and emissives never get darkened.
-- Every added cost gets a switch in `quality.ts`; tiers are picked automatically (WebGPU desktop → ultra, WebGPU phone → high, WebGL → medium/low) and dynamic resolution trims the scene pass under load.
+- Every added cost gets a switch in `quality.ts`; tiers are picked automatically (WebGPU desktop → ultra, WebGPU phone → high, WebGL → medium/low). The frame is fill-rate bound — every pass costs per pixel — so each tier caps the drawing buffer (`maxPixels`, lowering the pixel ratio on large high-DPI screens), and dynamic resolution scales the whole canvas pixel ratio (scene and post together) under load.
 
 ## World conventions
 
@@ -36,3 +37,13 @@ The field occupies |x| < ~46. Inside |x| < 50 nothing rises above z ≈ −2 (it
 - **Budget** — `biomes.test.ts` caps a segment at 90k vertices; ten segments stay resident.
 
 Recipe for a new biome: add a `BiomeDef` (reuse the kit; new looks come from layout, layer remaps and uniforms), extend `biomes.test.ts` if it introduces new geometry, then check it on both backends (see `docs/browser-testing.md`).
+
+## Destruction
+
+Visual only — the sim never knows. `FxDirector` turns explosions into `Trench.damage(x, y, radius, power)`, and the damage lands on each structure when the shockwave ring reaches it (`RING_SPEED`), so a boss kill levels the deck outward from the blast.
+
+- **Breakables** — layouts wrap structures in `SegmentBuilder.breakable(opts, parts)`: far-deck cells (one part standing on its base: topple, slump or sink) and trench crossings (`crossing()`: two halves hinged at the walls). Explosive ones (`opts.explosive`) detonate a moment later and can chain. Falls never head toward the play field (`breakables.test.ts` poses every vertex to check it).
+- **No extra draw calls** — breakable geometry stays in its segment's one mesh; every vertex carries `aPart`, a row of the `PartTable` float texture (rotation, pivot and drop, broken flag and heat) that the hull, beacon and cone materials read in the vertex shader. Row 0 never moves; each pool segment owns `MAX_PARTS` rows. Breaking is a small texture upload.
+- **Trains and asteroids** — a wrecked train brakes and its cars go up one after the other; asteroids shatter and a fresh one comes round on wrap.
+- **Scorch** — the sea simulation's B/A channels hold char and heat, advected in whole texels so marks stay crisp; `Sea.scorchAt` lets the hull read them, so terraces and bridges under a blast burn too. The simulation runs over the void floor as well.
+- **Fire** — `Trench.fires` (recomputed every frame from broken parts and wrecked cars) feeds flame particles and flickering lights, kept below bullet brightness.
