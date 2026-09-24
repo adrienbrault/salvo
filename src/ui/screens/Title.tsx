@@ -1,13 +1,21 @@
 import { game } from '../game';
 import { ui } from '../store';
 
-/** Shown while the renderer compiles its pipelines and paints the hull textures. */
+/** Shown while the renderer paints the hull textures and compiles the title's pipelines. */
 export function Boot() {
+  const progress = ui.bootProgress.value;
   return (
     <div class="screen boot">
       <h1 class="logo">SALVO</h1>
-      <div class="boot-bar" role="progressbar" aria-label="Loading">
-        <i />
+      <div
+        class="boot-bar"
+        role="progressbar"
+        aria-label="Loading"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(progress * 100)}
+      >
+        <i style={{ transform: `scaleX(${progress})` }} />
       </div>
       <p class="boot-text">{ui.bootStage.value}</p>
     </div>

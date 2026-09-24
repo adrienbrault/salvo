@@ -91,6 +91,9 @@ async function boot(): Promise<void> {
       onStage: (s) => {
         ui.bootStage.value = s;
       },
+      onProgress: (f) => {
+        ui.bootProgress.value = f;
+      },
     });
   } catch (err) {
     console.error(err);

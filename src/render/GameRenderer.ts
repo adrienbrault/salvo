@@ -40,7 +40,12 @@ export interface RendererOptions {
   tier?: Tier | 'auto';
   /** Called as boot moves through its slow steps (shown on the loading screen). */
   onStage?: (stage: string) => void;
+  /** Boot progress, 0 to 1: texture painting, then shader compilation. */
+  onProgress?: (fraction: number) => void;
 }
+
+/** Share of the loading bar given to painting textures; compiling shaders takes the rest. */
+const TEXTURE_SHARE = 0.2;
 
 /** Key light ("sun"): low, from the upper left, so shadows run long across the deck. */
 const KEY_POS = new Vector3(-130, 100, 70);
@@ -203,13 +208,24 @@ export class GameRenderer {
     stage(`Loading fonts… (${isWebGPU ? 'WebGPU' : 'WebGL 2'}, ${tier})`);
     // Stencils on the hull use the UI font: make sure it is loaded before painting.
     await document.fonts?.load('700 32px "Chakra Petch"').catch(() => undefined);
-    const hull = await generateHullTextures(q.hullTexture, Math.min(8, renderer.getMaxAnisotropy()), (i, n) =>
-      stage(`Painting textures ${i + 1}/${n}…`),
+    const hull = await generateHullTextures(
+      q.hullTexture,
+      Math.min(8, renderer.getMaxAnisotropy()),
+      (i, n) => {
+        stage(`Painting textures ${i + 1}/${n}…`);
+        o.onProgress?.((TEXTURE_SHARE * i) / n);
+      },
     );
     stage('Compiling shaders…');
     const gr = new GameRenderer(renderer, q, isWebGPU, hull);
-    await gr.warmup();
+    let shaders = 0;
+    await gr.warmup((done, total) => {
+      // A later round can find more to compile: the bar never moves back.
+      shaders = Math.max(shaders, done / total);
+      o.onProgress?.(TEXTURE_SHARE + (1 - TEXTURE_SHARE) * shaders);
+    });
     stage('Ready');
+    o.onProgress?.(1);
     return gr;
   }
 
@@ -270,7 +286,7 @@ export class GameRenderer {
    * what only play draws (ship, every enemy kind and bullet style, boss, asteroids) to compile
    * on title and menu frames: the game opens sooner, and a level waits for `gameplayReady`.
    */
-  private async warmup(onProgress?: (done: number, total: number) => void): Promise<void> {
+  private async warmup(onProgress: (done: number, total: number) => void): Promise<void> {
     this.rig.fit(400, 700);
     this.particles.update(1 / 60, 0, 0);
     this.sea.update(1 / 60);

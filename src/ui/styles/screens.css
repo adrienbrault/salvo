@@ -87,11 +87,11 @@
 }
 .boot-bar i {
   display: block;
-  width: 40%;
   height: 100%;
   background: var(--cyan);
   box-shadow: 0 0 12px var(--cyan);
-  animation: boot-slide 1.1s ease-in-out infinite;
+  transform-origin: left;
+  transition: transform 0.2s ease-out;
 }
 .boot-text {
   width: auto;
@@ -930,15 +930,6 @@
       0 0 40px rgba(77, 232, 255, 0.25);
   }
 }
-@keyframes boot-slide {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(250%);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .logo,
   .chassis-card,

@@ -95,6 +95,8 @@ export const ui = {
   bootError: signal<string | null>(null),
   /** The boot step in progress (the loading screen shows it). */
   bootStage: signal('Preparing the renderer…'),
+  /** Boot progress, 0 to 1 (the loading screen's bar). */
+  bootProgress: signal(0),
 };
 
 let toastId = 0;
