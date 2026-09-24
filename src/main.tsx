@@ -1,6 +1,7 @@
 import { effect } from '@preact/signals';
 import { render } from 'preact';
 import { Vector2 } from 'three/webgpu';
+import { fpsMeter } from './app/fpsMeter';
 import { Game } from './app/Game';
 import { Loop } from './app/Loop';
 import { installRafShim } from './app/rafShim';
@@ -137,7 +138,11 @@ async function boot(): Promise<void> {
   window.addEventListener('pointerdown', unlock, { once: false });
   window.addEventListener('keydown', unlock, { once: false });
 
-  new Loop((dt, ms) => game!.tick(dt, ms)).start();
+  const meter = params.has('fps') ? fpsMeter(gr) : null;
+  new Loop((dt, ms) => {
+    game!.tick(dt, ms);
+    meter?.(ms);
+  }).start();
 
   const quick = params.get('quick');
   if (quick) {
