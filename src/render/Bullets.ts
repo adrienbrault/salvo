@@ -1,14 +1,15 @@
-import { attribute, float, max, pow, smoothstep, uv, vec3, vec4 } from 'three/tsl';
+import { attribute, float, max, min, pow, smoothstep, uv, vec3, vec4 } from 'three/tsl';
 import {
   AdditiveBlending,
   DynamicDrawUsage,
   InstancedBufferAttribute,
   InstancedMesh,
   MeshBasicNodeMaterial,
+  NormalBlending,
   PlaneGeometry,
 } from 'three/webgpu';
 import type { Bullet, BulletStyle } from '../sim/types';
-import { hueColor } from './palette';
+import { dangerHue, hueColor } from './palette';
 
 /**
  * Per-style visual recipe. Quads lie flat on the gameplay plane, rotated along velocity.
@@ -44,8 +45,10 @@ export interface BulletViewOpts {
 }
 
 /**
- * One instanced draw call for a whole bullet pool. Additive HDR sprites: white-hot core,
- * saturated body, soft glow — bloom does the rest.
+ * One instanced draw call for a whole bullet pool. HDR sprites: white-hot core, saturated
+ * body, soft glow — bloom does the rest. Danger (enemy bullets) also gets a dark rim that
+ * cuts it out of whatever is behind — explosions, fires, bright hull — so it reads as a
+ * bullet at a glance and never as an enemy or an effect.
  */
 export class BulletLayer {
   readonly mesh: InstancedMesh;
@@ -55,10 +58,12 @@ export class BulletLayer {
   /**
    * @param gain brightness multiplier: the player's own shots are dimmed so the danger
    *   (enemy bullets) always reads first.
+   * @param rim dark rim (premultiplied blending) instead of pure additive glow.
    */
   constructor(
     readonly capacity: number,
     private readonly gain = 1,
+    private readonly rim = false,
   ) {
     const geo = new PlaneGeometry(2, 2);
     this.colors = new InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
@@ -71,7 +76,6 @@ export class BulletLayer {
     const mat = new MeshBasicNodeMaterial();
     mat.transparent = true;
     mat.depthWrite = false;
-    mat.blending = AdditiveBlending;
     mat.fog = false;
     const color = attribute('aColor', 'vec4');
     const shape = attribute('aShape', 'vec4');
@@ -80,8 +84,21 @@ export class BulletLayer {
     const core = smoothstep(shape.x, shape.x.mul(0.3), d).mul(shape.w);
     const body = smoothstep(shape.y, shape.y.mul(0.55), d);
     const glow = pow(max(float(1).sub(d), 0), 2.2).mul(shape.z);
-    const rgb = color.xyz.mul(body.add(glow)).add(vec3(1, 1, 1).mul(core).mul(1.6));
-    mat.colorNode = vec4(rgb.mul(color.w), 1);
+    if (rim) {
+      // Premultiplied: rgb adds light, alpha darkens what is behind. The rim sits just outside
+      // the body, so the hitbox stays exactly what you see.
+      mat.blending = NormalBlending;
+      mat.premultipliedAlpha = true;
+      const ink = smoothstep(min(shape.y.add(0.34), 1), shape.y, d);
+      const rgb = color.xyz.mul(body.add(glow.mul(0.3))).add(vec3(1, 1, 1).mul(core).mul(1.8));
+      const alpha = max(ink.mul(0.82), body).mul(min(color.w, 1));
+      mat.colorNode = vec4(rgb.mul(color.w), alpha);
+    } else {
+      // The player's own shots: soft coloured streaks, no white-hot core (that is danger's).
+      mat.blending = AdditiveBlending;
+      const rgb = color.xyz.mul(body.mul(0.8).add(glow));
+      mat.colorNode = vec4(rgb.mul(color.w), 1);
+    }
 
     this.mesh = new InstancedMesh(geo, mat, capacity);
     this.mesh.instanceMatrix.setUsage(DynamicDrawUsage);
@@ -132,7 +149,7 @@ export class BulletLayer {
         const f = 1 - Math.min(1, Math.max(0, (Math.sqrt(d2) - o.fogRadius * 0.7) / (o.fogRadius * 0.3)));
         vis *= f;
       }
-      const col = hueColor(b.hue);
+      const col = hueColor(this.rim ? dangerHue(b.hue) : b.hue);
       const j = i * 4;
       c[j] = col.r;
       c[j + 1] = col.g;

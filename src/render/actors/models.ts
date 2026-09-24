@@ -169,9 +169,10 @@ function mine(): ModelParts {
     cone.applyQuaternion(new Quaternion().setFromUnitVectors(up, v));
     spikes.push(cone);
   }
+  // Solid spikes round a small glowing heart: a thing to shoot, not a bullet to dodge.
   return {
-    hull: [new IcosahedronGeometry(1.8, 0)],
-    glow: [...spikes, new IcosahedronGeometry(1.1, 1)],
+    hull: [new IcosahedronGeometry(1.8, 0), ...spikes],
+    glow: [new IcosahedronGeometry(1.1, 1)],
   };
 }
 

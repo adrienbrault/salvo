@@ -135,7 +135,7 @@ export class GameRenderer {
       scorch: (xy) => this.sea.scorchAt(xy),
     });
     this.enemies = new EnemyLayer(scene);
-    this.bullets = new BulletLayer(3000);
+    this.bullets = new BulletLayer(3000, 1, true);
     this.shots = new BulletLayer(800, 0.4);
     scene.add(this.bullets.mesh, this.shots.mesh);
     this.particles = new Particles(renderer, scene, quality.particles, quality.motes);

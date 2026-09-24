@@ -209,7 +209,8 @@ export class Sea {
     const dens = smoothstep(0.3, 0.85, c1.mul(0.65).add(c2.mul(0.35)));
     const crest = dens.mul(dens).mul(dens);
     const valley = vec3(0.35, 0.2, 0.9).mul(this.glow).mul(0.03);
-    const clouds = mix(valley, this.glow.mul(0.7), crest).add(this.glow.mul(disturbed.mul(0.5)));
+    // Crests stay well below bullet brightness: bullets (often the same hue) fly over them.
+    const clouds = mix(valley, this.glow.mul(0.36), crest).add(this.glow.mul(disturbed.mul(0.35)));
     const solid = this.lava.add(this.cloud);
     // Scorch: blackened metal and crust, soot in the clouds, glowing while it is hot.
     const burnt = h.sample(simUV.add(vec2(0, this.scorchLag)));

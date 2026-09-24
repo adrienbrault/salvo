@@ -26,6 +26,14 @@ export function hueColor(h: Hue): Color {
   return c;
 }
 
+/** Danger never wears the player's colours (cyan and blue shots): those bullets turn violet. */
+const DANGER_HUE: Partial<Record<Hue, Hue>> = { cyan: 'violet', blue: 'violet' };
+
+/** The hue an enemy bullet is drawn in. */
+export function dangerHue(h: Hue): Hue {
+  return DANGER_HUE[h] ?? h;
+}
+
 /** Height of the gameplay plane above which nothing is simulated (render-only depth). */
 export const PLAY_Z = 0;
 /** The liquid-metal river at the bottom of the trench. */

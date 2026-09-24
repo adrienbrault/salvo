@@ -6,7 +6,7 @@ import type { CameraRig } from '../CameraRig';
 import type { Sea } from '../env/Sea';
 import type { Trench, Wreck } from '../env/Trench';
 import type { Post } from '../Post';
-import { hueColor } from '../palette';
+import { dangerHue, hueColor } from '../palette';
 import type { LightPool } from './Lights';
 import type { Particles } from './Particles';
 
@@ -320,7 +320,7 @@ export class FxDirector {
             speed: [4, 14],
             life: 0.5,
             size: 0.7,
-            color: hueColor(e.hue),
+            color: hueColor(dangerHue(e.hue)),
             intensity: 3,
             kind: 'ember',
           });
@@ -367,9 +367,10 @@ export class FxDirector {
           count: Math.round(2 + f.size * 0.35 * f.heat),
           speed: [1.5, 5 + f.size * 0.15],
           life: 0.7 + f.heat * 0.6,
-          size: 1 + f.size * 0.06,
+          size: 0.8 + f.size * 0.05,
           color: FIRE,
-          intensity: 1.5 + f.heat * 2.5,
+          // Below bullet brightness: fire is scenery, and must never read as danger.
+          intensity: 0.8 + f.heat * 1.2,
           kind: 'flame',
           zBias: 1,
         });

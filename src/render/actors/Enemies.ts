@@ -56,13 +56,17 @@ const _q = new Quaternion();
 const _s = new Vector3();
 const _e = new Euler();
 
-/** Lit metal with a neon fresnel rim; `aFlash` (per instance) whitens on hit. */
+/**
+ * Lit metal with a neon fresnel rim; `aFlash` (per instance) whitens on hit. Enemies read as
+ * solid, lit ships (a lighter, hue-tinted paint that catches the key light) so they are never
+ * mistaken for bullets, which are the only glowing dots with dark rims.
+ */
 function hullMaterial(
   hue: Hue,
   flash: Node<'float'> = attribute('aFlash', 'float'),
 ): MeshStandardNodeMaterial {
-  const base = new Color(0x1a1e2a).lerp(hueColor(hue), 0.12);
-  const mat = new MeshStandardNodeMaterial({ color: base, metalness: 0.8, roughness: 0.32 });
+  const base = new Color(0x3a4150).lerp(hueColor(hue), 0.22);
+  const mat = new MeshStandardNodeMaterial({ color: base, metalness: 0.55, roughness: 0.38 });
   const rim = pow(float(1).sub(abs(dot(normalView, positionViewDirection))), 2.5);
   const c = hueColor(hue);
   mat.emissiveNode = vec3(c.r, c.g, c.b)
@@ -71,11 +75,11 @@ function hullMaterial(
   return mat;
 }
 
-/** Unlit HDR emissive parts, gently pulsing. */
+/** Unlit HDR emissive parts, gently pulsing (kept below bullet brightness). */
 function glowMaterial(
   hue: Hue,
   flash: Node<'float'> = attribute('aFlash', 'float'),
-  intensity = 4.5,
+  intensity = 2.6,
 ): MeshBasicNodeMaterial {
   const mat = new MeshBasicNodeMaterial();
   const c = hueColor(hue);
