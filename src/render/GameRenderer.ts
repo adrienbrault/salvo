@@ -1,4 +1,3 @@
-import { ClusteredLighting } from 'three/addons/lighting/ClusteredLighting.js';
 import { DynamicLighting } from 'three/addons/lighting/DynamicLighting.js';
 import { fog, max, mix, positionView, positionWorld, smoothstep, uniform } from 'three/tsl';
 import {
@@ -24,6 +23,7 @@ import { generateHullTextures, type HullTextureSet } from './env/HullTextures';
 import { Sea } from './env/Sea';
 import { SpaceEnvironment } from './env/SpaceEnvironment';
 import { TRENCH, Trench } from './env/Trench';
+import { FixedClusteredLighting } from './FixedClusteredLighting';
 import { FxDirector } from './fx/FxDirector';
 import { LightPool } from './fx/Lights';
 import { Particles } from './fx/Particles';
@@ -92,7 +92,7 @@ export class GameRenderer {
     renderer.shadowMap.enabled = quality.shadows;
     renderer.shadowMap.type = PCFShadowMap;
     renderer.lighting = quality.clustered
-      ? new ClusteredLighting(quality.lights)
+      ? new FixedClusteredLighting(quality.lights)
       : new DynamicLighting({ maxPointLights: quality.lights });
 
     scene.background = new Color(BIOMES[0]!.fog);
