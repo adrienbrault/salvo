@@ -71,23 +71,27 @@ function hullMaterial(
   const rim = pow(float(1).sub(abs(dot(normalView, positionViewDirection))), 2.5);
   const c = hueColor(hue);
   mat.emissiveNode = vec3(c.r, c.g, c.b)
-    .mul(rim.mul(1.8))
-    .add(vec3(1, 1, 1).mul(flash.mul(3.5)));
+    .mul(rim.mul(1.1))
+    .add(vec3(1, 1, 1).mul(flash.mul(1.2)));
   return mat;
 }
 
-/** Unlit HDR emissive parts, gently pulsing (kept below bullet brightness). */
+/**
+ * Unlit emissive parts, gently pulsing. Kept dim, the hit flash too: an enemy's glow in its own
+ * bullets' hue, as bright as them, read as more bullets (and several flashing enemies bloomed
+ * into a white blot over the top of the field).
+ */
 function glowMaterial(
   hue: Hue,
   flash: Node<'float'> = attribute('aFlash', 'float'),
-  intensity = 2.6,
+  intensity = 1.1,
 ): MeshBasicNodeMaterial {
   const mat = new MeshBasicNodeMaterial();
   const c = hueColor(hue);
   const pulse = oscSine(time.mul(0.8)).mul(0.25).add(0.9);
   mat.colorNode = vec3(c.r, c.g, c.b)
     .mul(pulse.mul(intensity))
-    .add(vec3(1, 1, 1).mul(flash.mul(6)));
+    .add(vec3(1, 1, 1).mul(flash.mul(1.5)));
   return mat;
 }
 
@@ -187,11 +191,11 @@ export class BossView {
         oscSine(time.mul(this.rage.mul(2).add(1)))
           .mul(0.35)
           .add(1)
-          .mul(this.rage.mul(3).add(5)),
+          .mul(this.rage.mul(1.5).add(2.4)),
       )
-      .add(vec3(1, 1, 1).mul(this.flash.mul(6)));
-    const glowV = glowMaterial('violet', this.flash, 4);
-    const glowO = glowMaterial('orange', this.flash, 5);
+      .add(vec3(1, 1, 1).mul(this.flash.mul(2)));
+    const glowV = glowMaterial('violet', this.flash, 1.6);
+    const glowO = glowMaterial('orange', this.flash, 2);
 
     const core = new Mesh(new SphereGeometry(4.2, 32, 20), coreMat);
     const shell = new Mesh(new SphereGeometry(6.2, 28, 16, 0, Math.PI * 2, 0.9, Math.PI - 1.8), hull);

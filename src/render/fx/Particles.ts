@@ -280,7 +280,9 @@ export class Particles {
     mat.scaleNode = vec2(s.mul(stretch), s);
     const r = uv().sub(0.5).length().mul(2);
     const shape = smoothstep(1, 0, r).pow(1.6);
-    mat.colorNode = vec4(baseCol.mul(fade).mul(shape), 1);
+    // Effects stay below bullets: sparks, embers and debris at half their emitted brightness.
+    const gain = isMote.or(isFlame).select(float(1), float(0.5));
+    mat.colorNode = vec4(baseCol.mul(fade).mul(shape).mul(gain), 1);
 
     this.sprite = new Sprite(mat);
     this.sprite.count = capacity;

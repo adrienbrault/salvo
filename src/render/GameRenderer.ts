@@ -387,8 +387,10 @@ export class GameRenderer {
         const b = items[i]!;
         this.lights.add(b.x, b.y, 0, DANGER, 260, 56);
       }
+      // Heavy enemies light the trench under them. From above, the light blew their own hull
+      // out into a white blot.
       for (const e of world.enemies.items) {
-        if (e.heavy) this.lights.add(e.x, e.y, 3, hueColor(e.hue), 1500, 60);
+        if (e.heavy) this.lights.add(e.x, e.y, -8, hueColor(e.hue), 900, 60);
       }
       this.fx.setLowHp(p?.hp === 1 && p.alive, t);
       this.fx.update(dt, world.gauge);

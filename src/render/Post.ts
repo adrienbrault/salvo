@@ -130,7 +130,8 @@ export class Post {
 
     let out: Node<'vec4'> = base;
     if (o.bloom) {
-      const b = bloom(base, 1, 0.55, 0.62);
+      // Threshold above 1: bullets' cores and the brightest effects bloom, lit scenery doesn't.
+      const b = bloom(base, 1, 0.55, 1);
       b.strength = this.bloomStrength;
       out = out.add(b);
     }
