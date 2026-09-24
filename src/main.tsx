@@ -3,6 +3,7 @@ import { render } from 'preact';
 import { Vector2 } from 'three/webgpu';
 import { Game } from './app/Game';
 import { Loop } from './app/Loop';
+import { installRafShim } from './app/rafShim';
 import { browserStore, loadSettings, saveSettings } from './app/save';
 import { Audio } from './audio/Audio';
 import { InputController } from './input/Input';
@@ -63,6 +64,7 @@ function publishField(gr: GameRenderer, el: HTMLElement): void {
 
 async function boot(): Promise<void> {
   const params = new URLSearchParams(location.search);
+  if (params.has('rafshim')) installRafShim();
   const stage = document.getElementById('stage')!;
   const canvas = document.getElementById('gl') as HTMLCanvasElement;
   const uiRoot = document.getElementById('ui')!;
