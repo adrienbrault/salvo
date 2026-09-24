@@ -6,6 +6,7 @@ import {
   floor,
   fract,
   hash,
+  max,
   mix,
   mx_noise_float,
   normalMap,
@@ -32,9 +33,11 @@ import {
   Color,
   DoubleSide,
   DynamicDrawUsage,
+  Euler,
   Group,
   InstancedMesh,
   Matrix4,
+  Mesh,
   MeshBasicNodeMaterial,
   MeshStandardNodeMaterial,
   type Node,
@@ -46,9 +49,11 @@ import {
 import { Rng } from '../../sim/rng';
 import type { LightPool } from '../fx/Lights';
 import { AO_LAYER, SCROLL_SPEED } from '../palette';
+import type { BiomeDef } from './biomes';
 import { HullBuilder, type Surf } from './HullBuilder';
 import { type HullTextureSet, LAYER } from './HullTextures';
-import { type Materials, SEG, type Segment, type SideConfig, TRENCH } from './layout';
+import { type Materials, SEG, type Segment, TRENCH } from './layout';
+import { asteroidGeometry } from './rock';
 import { SegmentBuilder } from './SegmentBuilder';
 
 export { TRENCH } from './layout';
@@ -61,6 +66,9 @@ const MAX_SHOCKS = 4;
 const CARS = 6;
 const CAR_LEN = 9.6;
 const CAR_GAP = 0.9;
+const MAX_ROCKS = 48;
+/** Asteroids live in this band along y (the visible trench plus margins) and wrap around. */
+const ROCK_SPAN = ACTIVE * SEG + 40;
 
 const HEADLIGHT = new Color(1, 0.9, 0.75);
 
@@ -68,6 +76,16 @@ const _m = new Matrix4();
 const _q = new Quaternion();
 const _v = new Vector3();
 const _s = new Vector3(1, 1, 1);
+
+interface Asteroid {
+  x: number;
+  y: number;
+  z: number;
+  size: Vector3;
+  rot: Euler;
+  spin: Vector3;
+  drift: number;
+}
 
 interface Train {
   side: 1 | -1;
@@ -88,19 +106,21 @@ export interface TrenchOptions {
 // ── The trench ─────────────────────────────────────────────────────────────────
 
 /**
- * The world under the battle: a trench cut into a capital ship's hull, scrolling past.
- * Terraced walls step down to the liquid-metal sea; maglev trains race along the terraces;
- * the deck beyond is crowded with towers, domes, radiators, masts, radar dishes and turrets
- * that track the player. Everything uses one PBR material driven by the procedural texture
- * arrays, with animated emissive classes (flickering windows, energy flowing down the trench,
- * blinking alerts) and explosion shockwaves that ripple light across the hull.
+ * The world under the battle: a trench scrolling past, whose walls, floor and surroundings
+ * come from the current sector's biome (see biomes.ts) — a hull trench over liquid metal, a
+ * mined canyon over the void, a shipyard over clouds, a reactor over lava. Maglev trains race
+ * along the terraces and turrets track the player. Everything uses one PBR material driven by
+ * the procedural texture arrays, with animated emissive classes (flickering windows, energy
+ * flowing down the trench, blinking alerts, throbbing magma) and explosion shockwaves that
+ * ripple light across every surface.
  *
- * Segments are prebuilt once (a pool of variants) and recycled as they scroll, so nothing is
- * allocated or compiled during play.
+ * Segments are prebuilt per biome and run seed (a pool of variants) and recycled as they
+ * scroll; switching biome swaps geometry only, so no pipeline is ever compiled during play.
  */
 export class Trench {
   readonly accent = uniform(new Vector3(0.16, 0.42, 1));
   private readonly tint = uniform(new Vector3(1, 1, 1));
+  private readonly warm = uniform(new Color(1, 0.55, 0.25));
   private readonly energy = uniform(1);
   private readonly alert = uniform(0);
   private alertTarget = 0;
@@ -111,7 +131,11 @@ export class Trench {
   private readonly spares: Segment[] = [];
   private readonly trains: Train[] = [];
   private readonly cars: InstancedMesh;
-  private readonly rng = new Rng('trench');
+  private readonly rocks: InstancedMesh;
+  private asteroids: Asteroid[] = [];
+  private readonly mats: Materials;
+  private rng = new Rng('trench');
+  private biomeKey = '';
 
   constructor(
     scene: Scene,
@@ -126,29 +150,7 @@ export class Trench {
       cone: this.coneMaterial(),
       shadows: opts.shadows,
     };
-
-    const cfg: SideConfig = { pipes: [], conduits: [] };
-    cfg.pipes.push({ z: -24, r: 1.1 }, { z: -29.5, r: 0.8 });
-    for (const side of [-1, 1] as const) {
-      for (const x of [64, 92, 126, 168]) {
-        cfg.conduits.push({ side, x, kind: this.rng.pick(['pipes', 'channel', 'rail'] as const) });
-      }
-    }
-
-    const segments: Segment[] = [];
-    for (let i = 0; i < POOL; i++) {
-      const seg = new SegmentBuilder(this.rng.fork(`seg${i}`), mats, cfg).build();
-      seg.group.visible = false;
-      this.root.add(seg.group);
-      segments.push(seg);
-    }
-    for (let k = 0; k < ACTIVE; k++) {
-      const seg = segments[k]!;
-      seg.group.position.y = Y_MIN + k * SEG;
-      seg.group.visible = true;
-      this.active.push(seg);
-    }
-    this.spares.push(...segments.slice(ACTIVE));
+    this.mats = mats;
 
     this.cars = new InstancedMesh(carGeometry(), mats.hull, CARS * 2);
     this.cars.instanceMatrix.setUsage(DynamicDrawUsage);
@@ -156,6 +158,13 @@ export class Trench {
     this.cars.castShadow = opts.shadows;
     this.cars.layers.enable(AO_LAYER);
     this.root.add(this.cars);
+    this.rocks = new InstancedMesh(asteroidGeometry(7, LAYER.ROCK), mats.hull, MAX_ROCKS);
+    this.rocks.instanceMatrix.setUsage(DynamicDrawUsage);
+    this.rocks.frustumCulled = false;
+    this.rocks.castShadow = opts.shadows;
+    this.rocks.receiveShadow = true;
+    this.rocks.layers.enable(AO_LAYER);
+    this.root.add(this.rocks);
     for (const side of [-1, 1] as const) {
       this.trains.push({ side, y: 0, speed: 0, wait: this.rng.float(0.5, 3), on: false });
     }
@@ -196,8 +205,17 @@ export class Trench {
     // Warm interior light: windows (10×4 grid per tile) switch off now and then.
     const cell = floor(st.mul(vec2(10, 4)));
     const cellHash = hash(cell.x.add(cell.y.mul(57.31)).add(info.w.mul(131.7)));
-    const lit = step(0.12, fract(time.mul(0.035).add(cellHash)));
-    const warm = vec3(1, 0.55, 0.25).mul(em.r.mul(lit).mul(1.5));
+    // Magma never switches off: it throbs instead.
+    const magma = step(LAYER.MAGMA - 0.5, layer).mul(step(layer, LAYER.MAGMA + 0.5));
+    const lit = max(step(0.12, fract(time.mul(0.035).add(cellHash))), magma);
+    const heat = magma
+      .mul(
+        sin(time.mul(1.1).add(positionWorld.y.mul(0.07)))
+          .mul(0.5)
+          .add(0.5),
+      )
+      .add(1);
+    const warm = this.warm.mul(em.r.mul(lit).mul(heat).mul(1.5));
     // Accent: energy pulses flowing down the trench toward the player; boss alert turns it red.
     const flow = pow(fract(positionWorld.y.div(96).add(time.mul(0.85))), 10);
     const alarm = this.alert.mul(sin(time.mul(4)).mul(0.5).add(0.5));
@@ -266,10 +284,68 @@ export class Trench {
     return mat;
   }
 
-  setTheme(accent: Color, tint: Color): void {
+  /**
+   * Switch to a biome, rebuilding the segment pool from `seed` (each run gets its own
+   * trench). Rebuilding only happens when the biome or seed actually changes.
+   */
+  setBiome(def: BiomeDef, seed: string): void {
+    const accent = new Color(def.accent);
     this.accent.value.set(accent.r, accent.g, accent.b);
     // Paint is kept dark so emissives, lamps and gunfire carry the image.
-    this.tint.value.set(tint.r, tint.g, tint.b).multiplyScalar(0.6);
+    this.tint.value.set(...def.hull).multiplyScalar(0.6);
+    this.warm.value.setRGB(...def.warm);
+
+    const key = `${seed}/${def.id}`;
+    if (key === this.biomeKey) return;
+    this.biomeKey = key;
+    this.rng = new Rng(key);
+
+    for (const seg of [...this.active, ...this.spares]) {
+      this.root.remove(seg.group);
+      seg.group.traverse((o) => o instanceof Mesh && o.geometry.dispose());
+    }
+    const { cfg, layout } = def.plan(this.rng.fork('plan'));
+    const segments: Segment[] = [];
+    for (let i = 0; i < POOL; i++) {
+      const seg = new SegmentBuilder(this.rng.fork(`seg${i}`), this.mats, cfg, def.remap).build(layout);
+      seg.group.visible = false;
+      this.root.add(seg.group);
+      segments.push(seg);
+    }
+    this.active = segments.slice(0, ACTIVE);
+    this.active.forEach((seg, k) => {
+      seg.group.position.y = Y_MIN + k * SEG;
+      seg.group.visible = true;
+    });
+    this.spares.length = 0;
+    this.spares.push(...segments.slice(ACTIVE));
+
+    const ar = this.rng.fork('asteroids');
+    this.asteroids = [];
+    for (let i = 0; i < Math.min(MAX_ROCKS, def.asteroids); i++) {
+      const z = ar.float(-105, -30);
+      const r = ar.float(1.5, 4) + ((-30 - z) / 75) * ar.float(1, 6);
+      const a: Asteroid = {
+        x: 0,
+        y: Y_MIN + ar.float(0, ROCK_SPAN),
+        z,
+        size: new Vector3(ar.float(0.7, 1.3), ar.float(0.7, 1.3), ar.float(0.6, 1.1)).multiplyScalar(r),
+        rot: new Euler(ar.float(0, 6), ar.float(0, 6), ar.float(0, 6)),
+        spin: new Vector3(ar.float(-0.3, 0.3), ar.float(-0.3, 0.3), ar.float(-0.3, 0.3)),
+        drift: ar.float(-3, 3),
+      };
+      this.placeAsteroid(a, ar);
+      this.asteroids.push(a);
+    }
+    this.rocks.count = this.asteroids.length;
+    this.rocks.visible = this.asteroids.length > 0;
+  }
+
+  /** Random x that keeps the rock clear of the canyon walls at its depth. */
+  private placeAsteroid(a: Asteroid, r: Rng): void {
+    const wall = 24.7 + (a.z + 110) * 0.113;
+    const room = Math.max(0, wall - 3 - Math.max(a.size.x, a.size.y));
+    a.x = r.float(-room, room);
   }
 
   /** Mult gauge → how hard the trench's energy lines pulse. */
@@ -306,7 +382,7 @@ export class Trench {
     for (const seg of this.active) {
       const sy = seg.group.position.y;
       for (const p of seg.props) {
-        if (p.kind === 'dish') {
+        if (p.kind === 'spin') {
           p.obj.rotation.z += p.speed * dt;
           continue;
         }
@@ -328,6 +404,7 @@ export class Trench {
     }
 
     this.updateTrains(dt, lights);
+    this.updateAsteroids(dt, dy);
 
     for (const s of this.shocks) {
       if (s.w <= 0.002) {
@@ -339,6 +416,25 @@ export class Trench {
       s.y -= dy;
     }
     this.alert.value += (this.alertTarget - this.alert.value) * Math.min(1, dt * 2);
+  }
+
+  private updateAsteroids(dt: number, dy: number): void {
+    if (!this.asteroids.length) return;
+    this.asteroids.forEach((a, i) => {
+      a.y -= dy + a.drift * dt;
+      if (a.y < Y_MIN - 20) {
+        a.y += ROCK_SPAN;
+        this.placeAsteroid(a, this.rng);
+      } else if (a.y > Y_MIN - 20 + ROCK_SPAN) a.y -= ROCK_SPAN;
+      a.rot.x += a.spin.x * dt;
+      a.rot.y += a.spin.y * dt;
+      a.rot.z += a.spin.z * dt;
+      _v.set(a.x, a.y, a.z);
+      _q.setFromEuler(a.rot);
+      _m.compose(_v, _q, a.size);
+      this.rocks.setMatrixAt(i, _m);
+    });
+    this.rocks.instanceMatrix.needsUpdate = true;
   }
 
   private updateTrains(dt: number, lights: LightPool | null): void {

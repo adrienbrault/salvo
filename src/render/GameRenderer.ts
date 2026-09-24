@@ -19,15 +19,16 @@ import { EnemyLayer } from './actors/Enemies';
 import { PlayerShip } from './actors/PlayerShip';
 import { BulletLayer } from './Bullets';
 import { CameraRig, type Insets } from './CameraRig';
+import { BIOMES } from './env/biomes';
 import { generateHullTextures, type HullTextureSet } from './env/HullTextures';
 import { Sea } from './env/Sea';
-import { createSpaceEnvironment } from './env/SpaceEnvironment';
+import { SpaceEnvironment } from './env/SpaceEnvironment';
 import { TRENCH, Trench } from './env/Trench';
 import { FxDirector } from './fx/FxDirector';
 import { LightPool } from './fx/Lights';
 import { Particles } from './fx/Particles';
 import { Post } from './Post';
-import { FLOOR_Z, hueColor } from './palette';
+import { hueColor } from './palette';
 import { autoTier, DynamicResolution, type Quality, TIERS, type Tier } from './quality';
 
 export interface RendererOptions {
@@ -35,14 +36,6 @@ export interface RendererOptions {
   forceWebGL?: boolean;
   tier?: Tier | 'auto';
 }
-
-/** Sector color themes: accent lights, fog, key light and hull paint (albedo multiplier). */
-const THEMES = [
-  { accent: 0x2a6cff, fog: 0x03060f, key: 0x9fc4ff, hull: [0.95, 1, 1.1] },
-  { accent: 0x19d3c5, fog: 0x020a0c, key: 0xaef5ff, hull: [0.9, 1.05, 1] },
-  { accent: 0xff3d6e, fog: 0x0d0307, key: 0xffb3c6, hull: [1.15, 0.9, 0.88] },
-  { accent: 0xffa31a, fog: 0x0c0703, key: 0xffd9a0, hull: [1.12, 1, 0.8] },
-] as const;
 
 /** Key light ("sun"): low, from the upper left, so shadows run long across the deck. */
 const KEY_POS = new Vector3(-130, 100, 70);
@@ -62,10 +55,15 @@ export class GameRenderer {
   readonly fx: FxDirector;
   private readonly sea: Sea;
   private readonly trench: Trench;
-  private readonly fogColor = uniform(new Color(THEMES[0].fog));
-  private readonly hazeColor = uniform(new Color(THEMES[0].fog));
+  private readonly fogColor = uniform(new Color(BIOMES[0]!.fog));
+  private readonly hazeColor = uniform(new Color(BIOMES[0]!.fog));
+  private readonly hazeAmount = uniform(0.18);
+  private readonly hazeBottom = uniform(-38);
   private readonly fogNear = uniform(300);
   private readonly fogFar = uniform(800);
+  private readonly env: SpaceEnvironment;
+  private envBiome = '';
+  private readonly hemi = new HemisphereLight(0x4a6cff, 0x05060a, 0.15);
   private readonly enemies: EnemyLayer;
   private readonly bullets: BulletLayer;
   private readonly shots: BulletLayer;
@@ -95,19 +93,20 @@ export class GameRenderer {
       ? new ClusteredLighting(quality.lights)
       : new DynamicLighting({ maxPointLights: quality.lights });
 
-    scene.background = new Color(THEMES[0].fog);
-    // Range fog for the far end of the trench, plus a haze that thickens toward the river.
+    scene.background = new Color(BIOMES[0]!.fog);
+    // Range fog for the far end of the trench, plus a haze that thickens toward the floor
+    // (or swallows the canyon, over the void).
     const range = smoothstep(this.fogNear, this.fogFar, positionView.z.negate());
-    const depth = smoothstep(TRENCH.hullZ, FLOOR_Z - 4, positionWorld.z).mul(0.18);
+    const depth = smoothstep(TRENCH.hullZ, this.hazeBottom, positionWorld.z).mul(this.hazeAmount);
     (scene as Scene & { fogNode: Node }).fogNode = fog(
       mix(this.hazeColor, this.fogColor, range),
       max(range, depth),
     );
-    scene.environment = createSpaceEnvironment(renderer, KEY_POS.clone().sub(KEY_TARGET));
+    this.env = new SpaceEnvironment(renderer, KEY_POS.clone().sub(KEY_TARGET));
     scene.environmentIntensity = 1;
 
-    scene.add(new HemisphereLight(0x4a6cff, 0x05060a, 0.15));
-    this.key = new DirectionalLight(THEMES[0].key, 1.5);
+    scene.add(this.hemi);
+    this.key = new DirectionalLight(BIOMES[0]!.key, 1.5);
     this.key.position.copy(KEY_POS);
     this.key.target.position.copy(KEY_TARGET);
     if (quality.shadows) {
@@ -127,6 +126,7 @@ export class GameRenderer {
     this.sea = new Sea(renderer, scene, {
       simSize: quality.seaSim,
       reflectionScale: quality.reflectionScale,
+      noise: hull.macro,
     });
     this.trench = new Trench(scene, hull, {
       lamps: quality.envLamps,
@@ -206,15 +206,28 @@ export class GameRenderer {
     return { w: this.width, h: this.height, insets: this.insets };
   }
 
-  setTheme(sector: number): void {
-    const th = THEMES[sector % THEMES.length]!;
-    const accent = new Color(th.accent);
-    this.trench.setTheme(accent, new Color(...th.hull));
+  /**
+   * Switch to a sector's biome. `seed` (the run seed) reseeds its procedural layout, so every
+   * run flies over a different trench; the same seed always rebuilds the same one.
+   */
+  setTheme(sector: number, seed = ''): void {
+    const def = BIOMES[sector % BIOMES.length]!;
+    const accent = new Color(def.accent);
+    this.trench.setBiome(def, seed);
+    this.sea.setFloor(def.floor, new Color(def.glow));
     this.particles.setTheme(accent);
-    (this.scene.background as Color).setHex(th.fog);
-    this.fogColor.value.setHex(th.fog);
-    this.hazeColor.value.setHex(th.fog).lerp(accent, 0.07);
-    this.key.color.setHex(th.key);
+    (this.scene.background as Color).setHex(def.fog);
+    this.fogColor.value.setHex(def.fog);
+    this.hazeColor.value.setHex(def.fog).lerp(new Color(def.haze.color), def.haze.mix);
+    this.hazeAmount.value = def.haze.amount;
+    this.hazeBottom.value = def.haze.bottom;
+    this.key.color.setHex(def.key);
+    this.key.intensity = def.keyIntensity;
+    this.hemi.color.setHex(def.key).lerp(accent, 0.5);
+    if (this.envBiome !== def.id) {
+      this.envBiome = def.id;
+      this.scene.environment = this.env.render(new Color(...def.sky));
+    }
   }
 
   /**

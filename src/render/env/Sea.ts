@@ -1,11 +1,14 @@
 import {
+  abs,
   Fn,
   float,
   Loop,
+  mix,
   mx_fractal_noise_float,
   normalize,
   positionWorld,
   reflector,
+  sin,
   smoothstep,
   texture,
   time,
@@ -28,11 +31,13 @@ import {
   QuadMesh,
   RenderTarget,
   type Scene,
+  type Texture,
   Vector2,
   Vector4,
   type WebGPURenderer,
 } from 'three/webgpu';
 import { FLOOR_Z, SCROLL_SPEED } from '../palette';
+import type { FloorMode } from './biomes';
 
 const MAX_DROPS = 24;
 const SIM_DT = 1 / 60;
@@ -43,14 +48,19 @@ const DOMAIN = { x0: -48, y0: -150, w: 96, h: 420 };
 export interface SeaOptions {
   simSize: [number, number];
   reflectionScale: number;
+  /** Tileable noise (the hull set's macro texture) for lava crust and cloud banks. */
+  noise: Texture;
 }
 
 /**
- * Liquid-metal river at the bottom of the trench:
- *  - a GPU wave-equation heightfield (ping-pong render targets, works on WebGPU and WebGL2)
- *    fed by explosions and the ship's engine downwash, advected by the scroll;
- *  - planar reflections (`reflector`) distorted by the ripples;
- *  - PBR metal lit by every dynamic light in the scene.
+ * The floor of the trench, in one of the biome's modes:
+ *  - liquid metal: PBR metal with planar reflections (`reflector`) distorted by ripples;
+ *  - lava: dark crust split by molten cracks, hotter where it is disturbed;
+ *  - cloud: glowing cloud banks drifting under the scroll;
+ *  - void: nothing (the mesh is hidden).
+ * All share one material (modes are uniforms), so switching never compiles a pipeline.
+ * Ripples come from a GPU wave-equation heightfield (ping-pong render targets, WebGPU and
+ * WebGL2) fed by explosions and the ship's engine downwash, advected by the scroll.
  */
 export class Sea {
   readonly mesh: Mesh;
@@ -63,6 +73,9 @@ export class Sea {
   private readonly dropNode;
   private readonly scrollUV = uniform(0);
   private readonly scroll = uniform(0);
+  private readonly lava = uniform(0);
+  private readonly cloud = uniform(0);
+  private readonly glow = uniform(new Color(1, 0.35, 0.08));
   private pending: Vector4[] = [];
   private acc = 0;
   private flip = false;
@@ -133,10 +146,40 @@ export class Sea {
     const refl = reflector({ resolutionScale: opts.reflectionScale });
     refl.uvNode = refl.uvNode!.add(nWorld.xy.mul(0.09));
 
-    const mat = new MeshStandardNodeMaterial({ color: new Color(0x06080d), metalness: 1, roughness: 0.2 });
+    // Lava: crust cracks where two drifting noise layers cross mid-value; pools where both are high.
+    const tex = opts.noise;
+    const n1 = texture(tex, flow.mul(0.011).add(vec2(time.mul(0.004), 0)));
+    const n2 = texture(tex, flow.mul(0.029).sub(vec2(0, time.mul(0.009))));
+    const n = n1.r.mul(0.6).add(n2.a.mul(0.4));
+    const crack = smoothstep(0.045, 0, abs(n.sub(0.5)));
+    const pool = smoothstep(0.8, 0.92, n);
+    const disturbed = h.sample(simUV).x.abs().mul(0.8);
+    const throb = sin(time.mul(0.9).add(flow.y.mul(0.02)))
+      .mul(0.15)
+      .add(0.85);
+    const molten = this.glow.mul(crack.mul(1.1).add(pool.mul(1.3)).mul(throb).add(disturbed).add(0.008));
+    // Clouds: two slow layers; dim violet valleys, bright crests, stirred by explosions.
+    const c1 = texture(tex, flow.mul(0.007).add(vec2(time.mul(0.003), time.mul(0.002)))).a;
+    const c2 = texture(tex, flow.mul(0.019).add(vec2(time.mul(-0.006), 0))).r;
+    const dens = smoothstep(0.3, 0.85, c1.mul(0.65).add(c2.mul(0.35)));
+    const crest = dens.mul(dens).mul(dens);
+    const valley = vec3(0.35, 0.2, 0.9).mul(this.glow).mul(0.03);
+    const clouds = mix(valley, this.glow.mul(0.7), crest).add(this.glow.mul(disturbed.mul(0.5)));
+    const solid = this.lava.add(this.cloud);
+
+    const mat = new MeshStandardNodeMaterial();
+    mat.colorNode = mix(
+      vec3(0.0018, 0.0025, 0.004),
+      mix(vec3(0.02, 0.013, 0.011), this.glow.mul(dens.mul(0.04)), this.cloud),
+      solid,
+    );
+    mat.metalnessNode = solid.oneMinus();
     mat.normalNode = transformNormalToView(nWorld);
-    mat.roughnessNode = float(0.12).add(swellX.abs().mul(0.25));
-    mat.emissiveNode = refl.rgb.mul(0.6);
+    mat.roughnessNode = mix(float(0.12).add(swellX.abs().mul(0.25)), float(0.9), solid);
+    mat.emissiveNode = refl.rgb
+      .mul(mix(float(0.6), this.lava.mul(0.08), solid))
+      .add(molten.mul(this.lava))
+      .add(clouds.mul(this.cloud));
     // Reflections come from the reflector; the studio env map would paint grey blotches.
     mat.envMapIntensity = 0;
 
@@ -159,7 +202,15 @@ export class Sea {
     this.pending.push(new Vector4(x, y, radius, strength));
   }
 
+  setFloor(mode: FloorMode, glow: Color): void {
+    this.mesh.visible = mode !== 'void';
+    this.lava.value = mode === 'lava' ? 1 : 0;
+    this.cloud.value = mode === 'cloud' ? 1 : 0;
+    this.glow.value.copy(glow);
+  }
+
   update(dt: number): void {
+    if (!this.mesh.visible) return;
     this.scroll.value += SCROLL_SPEED * dt;
     this.acc += dt;
     let steps = 0;

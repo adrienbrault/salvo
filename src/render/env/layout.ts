@@ -28,7 +28,8 @@ export const B_FLOW = 4;
 
 export interface Prop {
   obj: Object3D;
-  kind: 'dish' | 'turret';
+  /** 'spin' turns at `speed` rad/s; 'turret' tracks the player. */
+  kind: 'spin' | 'turret';
   x: number;
   y: number;
   speed: number;

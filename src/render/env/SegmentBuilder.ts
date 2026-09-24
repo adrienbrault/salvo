@@ -38,27 +38,37 @@ const DOWN = new Vector3(0, -1, 0);
 
 type SideFace = 'in' | 'out' | 'py' | 'ny' | 'pz' | 'nz';
 
+/** Structures that fill a far-deck cell. */
+export type CellKind = 'tower' | 'dome' | 'radiator' | 'mast' | 'dish' | 'turret' | 'pad' | 'none';
+
+/** Layer substitutions a biome applies to everything it builds (e.g. clean or rusty paint). */
+export type LayerRemap = Readonly<Partial<Record<number, number>>>;
+
+/**
+ * Builds one scrolling segment. It is a kit: primitives (boxes, walls, decks, domes, masts,
+ * dishes, turrets, rock, trusses…) that biome layouts (see biomes.ts) compose. All hull
+ * pieces share one geometry/material, so a segment is a handful of draw calls.
+ */
 export class SegmentBuilder {
-  private readonly hb = new HullBuilder();
-  private readonly bb = new BeaconBuilder();
+  readonly hb = new HullBuilder();
+  readonly bb = new BeaconBuilder();
   private readonly cones: BufferGeometry[] = [];
   private readonly props: Prop[] = [];
   private readonly lamps: Lamp[] = [];
   private readonly group = new Group();
 
   constructor(
-    private readonly rng: Rng,
+    readonly rng: Rng,
     private readonly m: Materials,
-    private readonly cfg: SideConfig,
+    readonly cfg: SideConfig,
+    private readonly remap: LayerRemap = {},
   ) {}
 
-  build(): Segment {
-    for (const s of [-1, 1] as const) this.side(s);
-    const roll = this.rng.next();
-    if (roll < 0.4) this.bridge();
-    else if (roll < 0.65) this.pipeCrossing();
-
-    const hull = new Mesh(this.hb.build(), this.m.hull);
+  build(layout: (b: SegmentBuilder) => void): Segment {
+    layout(this);
+    const geo = this.hb.build();
+    remapLayers(geo, this.remap);
+    const hull = new Mesh(geo, this.m.hull);
     hull.castShadow = this.m.shadows;
     hull.receiveShadow = true;
     hull.layers.enable(AO_LAYER);
@@ -70,11 +80,21 @@ export class SegmentBuilder {
       cones.renderOrder = 5;
       this.group.add(cones);
     }
+    for (const p of this.props)
+      p.obj.traverse((o) => o instanceof Mesh && remapLayers(o.geometry, this.remap));
     return { group: this.group, props: this.props, lamps: this.lamps };
   }
 
+  /** The orbit biome's default content: both sides plus an occasional crossing. */
+  orbit(): void {
+    for (const s of [-1, 1] as const) this.orbitSide(s);
+    const roll = this.rng.next();
+    if (roll < 0.4) this.bridge();
+    else if (roll < 0.65) this.pipeCrossing();
+  }
+
   /** Box given in distances from the trench axis on side `s` (xa < xb). */
-  private sbox(
+  sbox(
     s: 1 | -1,
     xa: number,
     xb: number,
@@ -97,14 +117,36 @@ export class SegmentBuilder {
   }
 
   /** Horizontal deck strip between distances xa..xb, full segment length. */
-  private deck(s: 1 | -1, xa: number, xb: number, z: number, surf: Surf): void {
+  deck(s: 1 | -1, xa: number, xb: number, z: number, surf: Surf): void {
     const x0 = s > 0 ? xa : -xb;
     const tile = surf.tile ?? 16;
     this.hb.quad([x0, 0, z], [xb - xa, 0, 0], [0, SEG, 0], { ...surf, u0: x0 / tile, v0: 0 });
   }
 
+  /** Open pit in the deck (world x0 < x1): floor plus four inward-facing walls. */
+  recess(
+    x0: number,
+    x1: number,
+    y0: number,
+    y1: number,
+    z: number,
+    depth: number,
+    floor: Surf,
+    wall: Surf,
+  ): void {
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const zb = z - depth;
+    const hb = this.hb;
+    hb.quad([x0, y0, zb], [dx, 0, 0], [0, dy, 0], floor);
+    hb.quad([x0, y0, zb], [0, dy, 0], [0, 0, depth], wall);
+    hb.quad([x1, y1, zb], [0, -dy, 0], [0, 0, depth], wall);
+    hb.quad([x1, y0, zb], [-dx, 0, 0], [0, 0, depth], wall);
+    hb.quad([x0, y1, zb], [dx, 0, 0], [0, 0, depth], wall);
+  }
+
   /** Sloped wall facing the trench, from (xBottom, zBottom) up to (xTop, zTop), over ya..yb. */
-  private wall(
+  wall(
     s: 1 | -1,
     ya: number,
     yb: number,
@@ -123,10 +165,9 @@ export class SegmentBuilder {
     );
   }
 
-  private side(s: 1 | -1): void {
+  orbitSide(s: 1 | -1): void {
     const T = TRENCH;
     const r = this.rng;
-
     // Hull deck in bands of decreasing detail away from the trench.
     this.deck(s, T.lipX + T.lipW, 62, T.hullZ, { layer: r.pick([LAYER.DECK, LAYER.PLATES]), tile: 16 });
     this.deck(s, 62, 140, T.hullZ, { layer: r.pick([LAYER.PLATES, LAYER.PANELS]), tile: 32, shade: 0.9 });
@@ -136,7 +177,75 @@ export class SegmentBuilder {
       shade: 0.75,
     });
 
-    // Parapet along the trench edge with a flowing light bar and chase beacons.
+    this.parapet(s);
+
+    // Upper wall: panels of different kinds, with pillars and lamps.
+    this.wallPanels(s, T.terraceOut, T.terraceZ, T.lipX, T.hullZ, [
+      { layer: LAYER.WINDOWS, tile: 16 },
+      { layer: LAYER.WINDOWS, tile: 16 },
+      { layer: LAYER.PANELS, tile: 16 },
+      { layer: LAYER.RIBS, tile: 16 },
+      { layer: LAYER.CIRCUIT, tile: 12 },
+      { layer: LAYER.GRILLE, tile: 10 },
+      { layer: LAYER.STRIPS, tile: 12.6 },
+    ]);
+    this.pillars(s);
+    for (const y of [16, 48]) if (r.chance(0.8)) this.lamp(s, y);
+
+    this.terrace(s, r.pick([LAYER.DECK, LAYER.GRILLE, LAYER.PLATES]));
+
+    // Lower wall down into the liquid metal, with trench-long pipes.
+    this.wallPanels(s, T.bedX, T.bedZ, T.terraceIn, T.terraceZ, [
+      { layer: LAYER.GREEBLE, tile: 14 },
+      { layer: LAYER.PLATES, tile: 16 },
+      { layer: LAYER.RIBS, tile: 14 },
+      { layer: LAYER.GRIME, tile: 16 },
+      { layer: LAYER.WINDOWS, tile: 14, emit: 0.7 },
+    ]);
+    this.wallPipes(s);
+
+    // Near-deck greebles (only seen on wide screens) and a trench-long conduit.
+    this.hb.tube([s * 52, 0, T.hullZ + 0.55], [s * 52, SEG, T.hullZ + 0.55], 0.55, 8, {
+      layer: LAYER.RIBS,
+      tile: 2,
+    });
+    let y = r.float(0, 6);
+    while (y < SEG - 5) {
+      const len = r.float(5, 14);
+      this.nearGreeble(s, 54, 61, y, y + len);
+      y += len + r.float(2, 7);
+    }
+
+    for (const c of this.cfg.conduits) if (c.side === s) this.conduit(s, c.x, c.kind);
+    // Clusters of small greebles: a dense, shadow-catching surface instead of flat plating.
+    for (let i = 0; i < 7; i++)
+      this.scatter(s, r.float(56, 215), r.float(0, SEG), r.float(4, 11), r.int(8, 20));
+
+    this.farDeck((x0, x1, y0, y1, band) => this.cell(s, x0, x1, y0, y1, band, this.cellKind(band)));
+  }
+
+  /** Pillars between the upper-wall panels, each with an accent marker. */
+  pillars(s: 1 | -1): void {
+    const T = TRENCH;
+    for (const y of [0, 32]) {
+      this.sbox(
+        s,
+        T.terraceOut - 1.2,
+        T.terraceOut + 2.4,
+        y - 1.3,
+        y + 1.3,
+        T.terraceZ,
+        T.hullZ - 1.4,
+        { layer: LAYER.RIBS, tile: 6 },
+        { nz: null, out: null },
+      );
+      this.bb.add(s * (T.terraceOut - 1.4), y, T.hullZ - 2.2, 0.3, B_ACCENT, y);
+    }
+  }
+
+  /** Parapet along the trench edge with a flowing light bar and chase beacons. */
+  parapet(s: 1 | -1): void {
+    const T = TRENCH;
     this.sbox(
       s,
       T.lipX,
@@ -160,36 +269,14 @@ export class SegmentBuilder {
     for (let y = 4; y < SEG; y += 8) {
       this.bb.add(s * (T.lipX + 1.5), y, T.hullZ + T.lipH + 0.3, 0.32, B_RED, -y * 0.09);
     }
+  }
 
-    // Upper wall: panels of different kinds, with pillars and lamps.
-    this.wallPanels(s, T.terraceOut, T.terraceZ, T.lipX, T.hullZ, [
-      { layer: LAYER.WINDOWS, tile: 16 },
-      { layer: LAYER.WINDOWS, tile: 16 },
-      { layer: LAYER.PANELS, tile: 16 },
-      { layer: LAYER.RIBS, tile: 16 },
-      { layer: LAYER.CIRCUIT, tile: 12 },
-      { layer: LAYER.GRILLE, tile: 10 },
-      { layer: LAYER.STRIPS, tile: 12.6 },
-    ]);
-    for (const y of [0, 32]) {
-      this.sbox(
-        s,
-        T.terraceOut - 1.2,
-        T.terraceOut + 2.4,
-        y - 1.3,
-        y + 1.3,
-        T.terraceZ,
-        T.hullZ - 1.4,
-        { layer: LAYER.RIBS, tile: 6 },
-        { nz: null, out: null },
-      );
-      this.bb.add(s * (T.terraceOut - 1.4), y, T.hullZ - 2.2, 0.3, B_ACCENT, y);
-    }
-    for (const y of [16, 48]) if (r.chance(0.8)) this.lamp(s, y);
-
-    // Terrace: deck, maglev rails, edge curb and service boxes.
+  /** Maglev terrace: deck, glowing rails, edge curb and service boxes (trains run here). */
+  terrace(s: 1 | -1, layer: number): void {
+    const T = TRENCH;
+    const r = this.rng;
     this.deck(s, T.terraceIn, T.terraceOut, T.terraceZ, {
-      layer: r.pick([LAYER.DECK, LAYER.GRILLE, LAYER.PLATES]),
+      layer,
       tile: 12,
       shade: 0.85,
     });
@@ -234,15 +321,11 @@ export class SegmentBuilder {
       }
       y += len + r.float(1, 6);
     }
+  }
 
-    // Lower wall down into the liquid metal, with trench-long pipes.
-    this.wallPanels(s, T.bedX, T.bedZ, T.terraceIn, T.terraceZ, [
-      { layer: LAYER.GREEBLE, tile: 14 },
-      { layer: LAYER.PLATES, tile: 16 },
-      { layer: LAYER.RIBS, tile: 14 },
-      { layer: LAYER.GRIME, tile: 16 },
-      { layer: LAYER.WINDOWS, tile: 14, emit: 0.7 },
-    ]);
+  /** Trench-long pipes along the lower wall. */
+  wallPipes(s: 1 | -1): void {
+    const T = TRENCH;
     for (const p of this.cfg.pipes) {
       const xw = T.bedX + ((T.terraceIn - T.bedX) * (p.z - T.bedZ)) / (T.terraceZ - T.bedZ);
       const cx = s * (xw - p.r * 0.4);
@@ -251,25 +334,10 @@ export class SegmentBuilder {
         this.hb.tube([cx, cy, p.z], [cx, cy + 1.2, p.z], p.r + 0.22, 12, { layer: LAYER.HAZARD, tile: 3 });
       }
     }
+  }
 
-    // Near-deck greebles (only seen on wide screens) and a trench-long conduit.
-    this.hb.tube([s * 52, 0, T.hullZ + 0.55], [s * 52, SEG, T.hullZ + 0.55], 0.55, 8, {
-      layer: LAYER.RIBS,
-      tile: 2,
-    });
-    y = r.float(0, 6);
-    while (y < SEG - 5) {
-      const len = r.float(5, 14);
-      this.nearGreeble(s, 54, 61, y, y + len);
-      y += len + r.float(2, 7);
-    }
-
-    for (const c of this.cfg.conduits) if (c.side === s) this.conduit(s, c.x, c.kind);
-    // Clusters of small greebles: a dense, shadow-catching surface instead of flat plating.
-    for (let i = 0; i < 7; i++)
-      this.scatter(s, r.float(56, 215), r.float(0, SEG), r.float(4, 11), r.int(8, 20));
-
-    // Far deck: a grid of cells filled with towers, domes, radiators, masts, dishes, turrets.
+  /** The far deck: a grid of cells (distance bands × two rows), each handed to `fill`. */
+  farDeck(fill: (x0: number, x1: number, y0: number, y1: number, band: number) => void): void {
     const bands: [number, number][] = [
       [66, 90],
       [94, 124],
@@ -281,13 +349,21 @@ export class SegmentBuilder {
         [2, 30],
         [34, 62],
       ] as const) {
-        this.cell(s, x0, x1, y0, y1, bi);
+        fill(x0, x1, y0, y1, bi);
       }
     });
   }
 
+  /** The orbit biome's structure mix. */
+  cellKind(_band: number): CellKind {
+    return this.rng.weighted(
+      ['tower', 'tower', 'dome', 'radiator', 'mast', 'dish', 'turret', 'pad', 'none'] as const,
+      (k) => (k === 'tower' ? 3 : k === 'none' ? 1.2 : 1),
+    );
+  }
+
   /** Trench-long conduit (identical in every segment so it runs unbroken to the horizon). */
-  private conduit(s: 1 | -1, x: number, kind: 'pipes' | 'channel' | 'rail'): void {
+  conduit(s: 1 | -1, x: number, kind: 'pipes' | 'channel' | 'rail'): void {
     const z = TRENCH.hullZ;
     if (kind === 'pipes') {
       for (const [dx, r] of [
@@ -345,7 +421,7 @@ export class SegmentBuilder {
   }
 
   /** A cluster of small boxes around (distance x, y). */
-  private scatter(s: 1 | -1, x: number, y: number, radius: number, count: number): void {
+  scatter(s: 1 | -1, x: number, y: number, radius: number, count: number): void {
     const r = this.rng;
     const z = TRENCH.hullZ;
     const top = r.pick([LAYER.GRILLE, LAYER.PLATES, LAYER.PANELS]);
@@ -376,7 +452,7 @@ export class SegmentBuilder {
     }
   }
 
-  private wallPanels(s: 1 | -1, xB: number, zB: number, xT: number, zT: number, kinds: Surf[]): void {
+  wallPanels(s: 1 | -1, xB: number, zB: number, xT: number, zT: number, kinds: Surf[]): void {
     let ya = 0;
     while (ya < SEG) {
       const n = this.rng.int(1, 2);
@@ -391,7 +467,7 @@ export class SegmentBuilder {
     }
   }
 
-  private lamp(s: 1 | -1, y: number): void {
+  lamp(s: 1 | -1, y: number): void {
     const T = TRENCH;
     this.sbox(
       s,
@@ -405,28 +481,40 @@ export class SegmentBuilder {
       { out: null },
     );
     this.bb.add(s * 43.6, y, T.hullZ - 2.9, 0.42, B_LAMP, 0);
-    const apex = new Vector3(s * 43.6, y, T.hullZ - 3);
-    const target = new Vector3(s * 31, y, FLOOR_Z);
+    this.cone(new Vector3(s * 43.6, y, T.hullZ - 3), new Vector3(s * 31, y, FLOOR_Z));
+    this.light(s * 37, y, T.terraceZ + 4, WARM_LIGHT, 900, 36);
+  }
+
+  /** Volumetric light cone from `apex` toward `target` (additive, merged per segment). */
+  cone(apex: Vector3, target: Vector3, spread = 0.22): void {
     const dir = target.clone().sub(apex);
     const h = dir.length();
     dir.normalize();
-    const g = new ConeGeometry(h * 0.22, h, 20, 1, true);
+    const g = new ConeGeometry(h * spread, h, 20, 1, true);
     g.translate(0, -h / 2, 0);
     _q.setFromUnitVectors(DOWN, dir);
     _m.compose(apex, _q, ONE);
     g.applyMatrix4(_m);
     this.cones.push(g);
-    this.lamps.push({
-      x: s * 37,
-      y,
-      z: T.terraceZ + 4,
-      color: WARM_LIGHT,
-      intensity: 900,
-      distance: 36,
-    });
   }
 
-  private nearGreeble(s: 1 | -1, xa: number, xb: number, y0: number, y1: number): void {
+  /** Point light fed to the dynamic light pool while the segment is on screen. */
+  light(x: number, y: number, z: number, color: Color, intensity: number, distance: number): void {
+    this.lamps.push({ x, y, z, color, intensity, distance });
+  }
+
+  /** A separately animated hull mesh (spinning dish, tracking turret…) at (x, y, z). */
+  prop(b: HullBuilder, x: number, y: number, z: number, kind: 'spin' | 'turret', speed = 0): Mesh {
+    const mesh = new Mesh(b.build(), this.m.hull);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = this.m.shadows;
+    mesh.layers.enable(AO_LAYER);
+    this.group.add(mesh);
+    this.props.push({ obj: mesh, kind, x, y, speed, angle: this.rng.float(-1, 1) });
+    return mesh;
+  }
+
+  nearGreeble(s: 1 | -1, xa: number, xb: number, y0: number, y1: number): void {
     const r = this.rng;
     const z = TRENCH.hullZ;
     const kind = r.pick(['vent', 'rad', 'box', 'dome', 'none'] as const);
@@ -470,7 +558,7 @@ export class SegmentBuilder {
     }
   }
 
-  private dome(x: number, y: number, rad: number, layer: number): void {
+  dome(x: number, y: number, rad: number, layer: number): void {
     const z = TRENCH.hullZ;
     const prof: [number, number][] = [
       [rad + 0.5, 0],
@@ -485,12 +573,8 @@ export class SegmentBuilder {
     this.bb.add(x, y, z + 0.9 + rad * 0.8, 0.35, B_STROBE, this.rng.float(0, 6));
   }
 
-  private cell(s: 1 | -1, x0: number, x1: number, y0: number, y1: number, band: number): void {
+  cell(s: 1 | -1, x0: number, x1: number, y0: number, y1: number, band: number, kind: CellKind): void {
     const r = this.rng;
-    const kind = r.weighted(
-      ['tower', 'tower', 'dome', 'radiator', 'mast', 'dish', 'turret', 'pad', 'none'] as const,
-      (k) => (k === 'tower' ? 3 : k === 'none' ? 1.2 : 1),
-    );
     const z = TRENCH.hullZ;
     const cx = (x0 + x1) / 2;
     const cy = (y0 + y1) / 2;
@@ -592,7 +676,7 @@ export class SegmentBuilder {
     }
   }
 
-  private mast(x: number, y: number, z0: number, h: number): void {
+  mast(x: number, y: number, z0: number, h: number): void {
     this.hb.tube([x, y, z0], [x, y, z0 + h], 0.32, 8, { layer: LAYER.RIBS, tile: 2 });
     for (const k of [0.45, 0.8]) {
       const zz = z0 + h * k;
@@ -603,7 +687,7 @@ export class SegmentBuilder {
     this.bb.add(x + 1.6, y, z0 + h * 0.8 + 0.4, 0.25, B_RED, this.rng.float(0, 6));
   }
 
-  private dish(x: number, y: number, rad: number): void {
+  dish(x: number, y: number, rad: number): void {
     const z = TRENCH.hullZ;
     this.hb.lathe(
       x,
@@ -643,7 +727,7 @@ export class SegmentBuilder {
     this.bb.add(x, y, z + 3.4, 0.25, B_RED, this.rng.float(0, 6));
     this.props.push({
       obj: head,
-      kind: 'dish',
+      kind: 'spin',
       x,
       y,
       speed: this.rng.float(0.25, 0.7) * this.rng.sign(),
@@ -651,7 +735,7 @@ export class SegmentBuilder {
     });
   }
 
-  private turret(x: number, y: number): void {
+  turret(x: number, y: number): void {
     const z = TRENCH.hullZ;
     this.hb.lathe(
       x,
@@ -691,7 +775,7 @@ export class SegmentBuilder {
     this.props.push({ obj: head, kind: 'turret', x, y, speed: 0, angle: this.rng.float(-1, 1) });
   }
 
-  private bridge(): void {
+  bridge(): void {
     const T = TRENCH;
     const r = this.rng;
     const w = r.float(6, 10);
@@ -760,7 +844,7 @@ export class SegmentBuilder {
     }
   }
 
-  private pipeCrossing(): void {
+  pipeCrossing(): void {
     const T = TRENCH;
     const r = this.rng;
     const y = r.float(12, SEG - 12);
@@ -775,4 +859,16 @@ export class SegmentBuilder {
     }
     this.bb.add(0, y, z + rad + 0.4, 0.35, B_RED, r.float(0, 6));
   }
+}
+
+/** Rewrites the layer index in `aInfo.x` through a biome's substitution table. */
+export function remapLayers(geo: BufferGeometry, remap: LayerRemap): void {
+  const info = geo.getAttribute('aInfo');
+  if (!info || Object.keys(remap).length === 0) return;
+  const arr = info.array as Float32Array;
+  for (let i = 0; i < arr.length; i += 4) {
+    const to = remap[arr[i]!];
+    if (to !== undefined) arr[i] = to;
+  }
+  info.needsUpdate = true;
 }
