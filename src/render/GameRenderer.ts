@@ -213,7 +213,8 @@ export class GameRenderer {
   setTheme(sector: number, seed = ''): void {
     const def = BIOMES[sector % BIOMES.length]!;
     const accent = new Color(def.accent);
-    this.trench.setBiome(def, seed);
+    // Endless sectors reuse the four biomes: key by sector so each still gets its own trench.
+    this.trench.setBiome(def, `${seed}/${sector}`);
     this.sea.setFloor(def.floor, new Color(def.glow));
     this.particles.setTheme(accent);
     (this.scene.background as Color).setHex(def.fog);

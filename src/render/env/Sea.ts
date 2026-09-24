@@ -77,6 +77,7 @@ export class Sea {
   private readonly cloud = uniform(0);
   private readonly glow = uniform(new Color(1, 0.35, 0.08));
   private pending: Vector4[] = [];
+  private reflective = true;
   private acc = 0;
   private flip = false;
 
@@ -145,6 +146,11 @@ export class Sea {
 
     const refl = reflector({ resolutionScale: opts.reflectionScale });
     refl.uvNode = refl.uvNode!.add(nWorld.xy.mul(0.09));
+    // Lava and clouds don't reflect: skip the reflector's whole scene pass for them (three has
+    // no switch for it, so gate its per-frame update).
+    const base = refl.reflector as { updateBefore: (frame: unknown) => unknown };
+    const updateReflection = base.updateBefore.bind(base);
+    base.updateBefore = (frame) => (this.reflective ? updateReflection(frame) : undefined);
 
     // Lava: crust cracks where two drifting noise layers cross mid-value; pools where both are high.
     const tex = opts.noise;
@@ -177,7 +183,7 @@ export class Sea {
     mat.normalNode = transformNormalToView(nWorld);
     mat.roughnessNode = mix(float(0.12).add(swellX.abs().mul(0.25)), float(0.9), solid);
     mat.emissiveNode = refl.rgb
-      .mul(mix(float(0.6), this.lava.mul(0.08), solid))
+      .mul(solid.oneMinus().mul(0.6))
       .add(molten.mul(this.lava))
       .add(clouds.mul(this.cloud));
     // Reflections come from the reflector; the studio env map would paint grey blotches.
@@ -204,6 +210,8 @@ export class Sea {
 
   setFloor(mode: FloorMode, glow: Color): void {
     this.mesh.visible = mode !== 'void';
+    this.reflective = mode === 'metal';
+    this.pending = [];
     this.lava.value = mode === 'lava' ? 1 : 0;
     this.cloud.value = mode === 'cloud' ? 1 : 0;
     this.glow.value.copy(glow);

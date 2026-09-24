@@ -156,6 +156,8 @@ export class Trench {
     this.cars.instanceMatrix.setUsage(DynamicDrawUsage);
     this.cars.frustumCulled = false;
     this.cars.castShadow = opts.shadows;
+    // Same flags as the asteroid field, so both share one (pre-warmed) pipeline.
+    this.cars.receiveShadow = true;
     this.cars.layers.enable(AO_LAYER);
     this.root.add(this.cars);
     this.rocks = new InstancedMesh(asteroidGeometry(7, LAYER.ROCK), mats.hull, MAX_ROCKS);
