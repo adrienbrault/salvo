@@ -135,8 +135,11 @@ async function boot(): Promise<void> {
     audio?.unlock();
     audio?.music.start();
   };
-  window.addEventListener('pointerdown', unlock, { once: false });
-  window.addEventListener('keydown', unlock, { once: false });
+  // A touch only counts as a user gesture on release (pointerup/touchend): iOS Safari keeps
+  // audio locked after a touch pointerdown.
+  for (const type of ['pointerdown', 'pointerup', 'touchend', 'keydown']) {
+    window.addEventListener(type, unlock);
+  }
 
   const meter = params.has('fps') ? fpsMeter(gr) : null;
   new Loop((dt, ms) => {
