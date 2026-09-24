@@ -245,6 +245,41 @@
   font: 600 14px / 1.3 var(--font-ui);
   color: #ff9fb0;
 }
+.detail-foot {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font: 600 13px / 1.35 var(--font-ui);
+  color: var(--muted);
+}
+
+/* Hover detail: the same ItemDetail, floating beside the item under the mouse or keyboard
+   focus. Fixed at the screen's root (".screen >" also beats the screen's column sizing). */
+.screen > .hover-detail {
+  position: fixed;
+  z-index: 35;
+  top: 0;
+  left: 0;
+  width: min(300px, calc(100vw - 16px));
+  max-width: none;
+  pointer-events: none;
+  filter: drop-shadow(0 14px 22px rgba(0, 0, 0, 0.7));
+  animation: hover-in 0.12s ease-out both;
+}
+.hover-detail .detail {
+  padding: 12px 14px 14px;
+  background: rgba(9, 12, 26, 0.97);
+}
+.hover-detail .detail-glyph {
+  width: 36px;
+  font-size: 28px;
+}
+.hover-detail .detail-title h3 {
+  font-size: 18px;
+}
+.hover-detail .detail-desc {
+  font-size: 15px;
+}
 
 @keyframes card-in {
   from {
@@ -287,6 +322,11 @@
     background-position: -160% 0;
   }
 }
+@keyframes hover-in {
+  from {
+    opacity: 0;
+  }
+}
 @keyframes sold-in {
   from {
     opacity: 0;
@@ -304,7 +344,8 @@
     transform: none;
   }
   .card-face.no,
-  .r-legendary .card-face::before {
+  .r-legendary .card-face::before,
+  .screen > .hover-detail {
     animation: none;
   }
 }

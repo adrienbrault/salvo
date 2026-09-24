@@ -3,15 +3,19 @@ import { levelSpecFor, sectorName } from '../../run/levels';
 import { LEVELS_PER_SECTOR, type RunState, SECTORS } from '../../run/state';
 import { CONSTRAINTS } from '../../sim/constraints';
 import { computeStats } from '../../sim/stats';
+import { type HoverBind, HoverDetail, useHover } from '../components/HoverDetail';
+import { copyNote, ItemDetail } from '../components/ItemDetail';
 import { HpPips } from '../components/Pips';
 import { fmt } from '../format';
 import { game } from '../game';
+import { ABOVE } from '../place';
 import { ui } from '../store';
 
 /** The sector's three levels, the boss constraint, and the launch button. */
 export function SectorMap() {
   void ui.runVersion.value;
   const run = ui.run.value;
+  const hover = useHover<number>();
   if (!run) return null;
   const g = game();
   const specs = [];
@@ -62,7 +66,7 @@ export function SectorMap() {
           );
         })}
       </ol>
-      <RunStrip run={run} />
+      <RunStrip run={run} hover={(i) => hover.bind(i, `relic-${i}`, ABOVE)} />
       <footer class="screen-foot map-foot">
         <button type="button" class="btn go big launch" onClick={() => g.startLevel()}>
           Launch {current.name}
@@ -79,8 +83,14 @@ export function SectorMap() {
           </button>
         </div>
       </footer>
+      <HoverDetail at={hover.at}>{hover.at && relicDetail(run, hover.at.target)}</HoverDetail>
     </div>
   );
+}
+
+function relicDetail(run: RunState, slot: number) {
+  const inst = run.loadout.relics[slot];
+  return inst && <ItemDetail def={getItem(inst.id)} inst={inst} note={copyNote(run.loadout.relics, slot)} />;
 }
 
 function SectorPips({ run }: { run: RunState }) {
@@ -100,21 +110,31 @@ function SectorPips({ run }: { run: RunState }) {
   );
 }
 
-/** HP, money and relics at a glance. */
-export function RunStrip({ run }: { run: RunState }) {
+/** HP, money and relics at a glance. A relic shows its detail on hover; the row opens the ship. */
+export function RunStrip({ run, hover }: { run: RunState; hover(slot: number): HoverBind }) {
+  const relics = run.loadout.relics;
   return (
     <div class="run-strip">
       <HpPips hp={run.hp} max={computeStats(run).maxHp} />
-      <span class="run-relics">
-        {run.loadout.relics.map((r) => {
-          const def = getItem(r.id);
-          return (
-            <span key={r.uid} class="mini-relic" style={{ '--c': def.color }} title={def.name}>
-              {def.glyph}
-            </span>
-          );
-        })}
-      </span>
+      {relics.length > 0 ? (
+        <button
+          type="button"
+          class="run-relics"
+          aria-label={`Your ship: ${relics.map((r) => getItem(r.id).name).join(', ')}`}
+          onClick={() => (ui.modal.value = 'build')}
+        >
+          {relics.map((r, i) => {
+            const def = getItem(r.id);
+            return (
+              <span key={r.uid} class="mini-relic" style={{ '--c': def.color }} {...hover(i)}>
+                {def.glyph}
+              </span>
+            );
+          })}
+        </button>
+      ) : (
+        <span />
+      )}
       <span class="money run-money">${run.money}</span>
     </div>
   );

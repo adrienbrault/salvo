@@ -182,6 +182,17 @@
 .shop-empty {
   display: none;
 }
+.shop-empty .on-hover {
+  display: none;
+}
+@media (hover: hover) {
+  .shop-empty .on-hover {
+    display: inline;
+  }
+  .shop-empty .on-touch {
+    display: none;
+  }
+}
 .shop.has-detail .shop-detail {
   position: fixed;
   left: 0;

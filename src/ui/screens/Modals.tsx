@@ -1,10 +1,10 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect } from 'preact/hooks';
-import { getItem, resolveRelicDef } from '../../content/registry';
+import { getItem } from '../../content/registry';
 import { CALIBRATION_BONUS, KILL_TYPE_SOURCE } from '../../content/upgrades';
 import { computeStats, MODULE_EFFECT } from '../../sim/stats';
 import { KILL_TYPE_LABEL, KILL_TYPES } from '../../sim/types';
-import { ItemDetail } from '../components/ItemDetail';
+import { copyNote, ItemDetail } from '../components/ItemDetail';
 import { fmt } from '../format';
 import { game } from '../game';
 import { type Modal, type Settings, ui } from '../store';
@@ -240,17 +240,9 @@ function Build() {
         {lo.relics.length === 0 && (
           <p class="muted">No relics yet. The shop offers some after every level.</p>
         )}
-        {lo.relics.map((inst, i) => {
-          const copy = inst.id === 'blueprint' ? resolveRelicDef(lo.relics, i) : null;
-          return (
-            <ItemDetail
-              key={inst.uid}
-              def={getItem(inst.id)}
-              inst={inst}
-              note={inst.id === 'blueprint' ? (copy ? `Copies: ${copy.name}` : 'Copies nothing yet.') : null}
-            />
-          );
-        })}
+        {lo.relics.map((inst, i) => (
+          <ItemDetail key={inst.uid} def={getItem(inst.id)} inst={inst} note={copyNote(lo.relics, i)} />
+        ))}
       </Section>
       <Section title="Calibrations">
         {calibrated.length === 0 ? (

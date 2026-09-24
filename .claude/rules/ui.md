@@ -25,6 +25,7 @@ The UI is a Preact DOM overlay in `#ui` above the WebGPU canvas. Player-facing c
 ## Mobile and feel
 
 - Touch targets are ≥ 44px; every hover effect has a tap equivalent (select-then-act panels, arrow buttons beside drag reorder). Gate hover-only polish with `@media (hover: hover)`.
+- An item the player may want to read shows its `ItemDetail` beside it on mouse hover and keyboard focus: `useHover()` + `<HoverDetail>` (components/HoverDetail.tsx), rendered at the screen's root (a transformed or clipped ancestor traps a fixed box). Build the panel's and the hover's detail from one function so they never diverge; touch keeps tap-to-read.
 - Use safe-area vars (`--safe-*`) for anything pinned to an edge. Scrollable screens set `touch-action: pan-y` (the stage is `touch-action: none`).
 - Clipped shapes use `clip-path: var(--chamfer)` (size via `--cut`); outlines and outer shadows are clipped, so focus rings are inset box-shadows and glows go on an unclipped parent (`filter: drop-shadow`).
 - Replay a CSS animation by changing a `key` (relic pulses, card shake). Numbers roll with `Counter`, which writes text imperatively.

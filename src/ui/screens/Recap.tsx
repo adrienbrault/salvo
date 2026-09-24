@@ -1,7 +1,11 @@
 import type { JSX } from 'preact';
 import { getItem } from '../../content/registry';
+import type { RunState } from '../../run/state';
 import { KILL_TYPE_LABEL, KILL_TYPES } from '../../sim/types';
+import type { LevelTally } from '../../sim/world';
 import { Counter } from '../components/Counter';
+import { HoverDetail, useHover } from '../components/HoverDetail';
+import { copyNote, ItemDetail } from '../components/ItemDetail';
 import { fmt, fmtMoney } from '../format';
 import { game } from '../game';
 import { ui } from '../store';
@@ -13,6 +17,7 @@ export function Recap() {
   const report = ui.report.value;
   const tally = ui.tally.value;
   const run = ui.run.value;
+  const hover = useHover<number>();
   if (!report || !tally || !run) return null;
   const won = report.won;
   let t = 0.5;
@@ -46,7 +51,13 @@ export function Recap() {
     if (n === 0) return;
     const def = getItem(inst.id);
     triggers.push(
-      <li key={inst.uid} class="mini-relic" style={{ '--c': def.color }} title={def.name}>
+      <li
+        key={inst.uid}
+        class="mini-relic"
+        style={{ '--c': def.color }}
+        aria-label={`${def.name}, ${n}×`}
+        {...hover.bind(slot, `relic-${slot}`)}
+      >
         {def.glyph}
         <small>×{n}</small>
       </li>,
@@ -137,6 +148,22 @@ export function Recap() {
           {label}
         </button>
       </div>
+      <HoverDetail at={hover.at}>{hover.at && triggerDetail(run, tally, hover.at.target)}</HoverDetail>
     </div>
+  );
+}
+
+function triggerDetail(run: RunState, tally: LevelTally, slot: number) {
+  const relics = run.loadout.relics;
+  const inst = relics[slot];
+  if (!inst) return null;
+  const n = tally.triggers[slot] ?? 0;
+  return (
+    <ItemDetail
+      def={getItem(inst.id)}
+      inst={inst}
+      note={copyNote(relics, slot)}
+      foot={`Triggered ${n} ${n === 1 ? 'time' : 'times'} this level.`}
+    />
   );
 }

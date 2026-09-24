@@ -1,5 +1,6 @@
 import type { JSX } from 'preact';
 import { type ItemDef, KIND_LABEL } from '../../content/types';
+import type { HoverBind } from './HoverDetail';
 
 interface Props {
   def: ItemDef;
@@ -12,6 +13,8 @@ interface Props {
   shake?: number;
   /** Pop-in delay, ms (stagger). */
   delay?: number;
+  /** Shows the item's detail on hover (see useHover). */
+  hover?: HoverBind;
   onSelect?: () => void;
 }
 
@@ -37,7 +40,7 @@ function untilt(e: JSX.TargetedPointerEvent<HTMLButtonElement>): void {
 }
 
 /** Balatro-style item card: glyph, name, rarity frame, optional price tag. */
-export function ItemCard({ def, price, selected, dim, shake = 0, delay = 0, onSelect }: Props) {
+export function ItemCard({ def, price, selected, dim, shake = 0, delay = 0, hover, onSelect }: Props) {
   const cls = ['card', `r-${def.rarity}`, `k-${def.kind}`];
   if (selected) cls.push('selected');
   if (dim) cls.push('dim');
@@ -48,8 +51,14 @@ export function ItemCard({ def, price, selected, dim, shake = 0, delay = 0, onSe
       style={{ '--c': def.color, '--delay': `${delay}ms` }}
       aria-pressed={selected}
       aria-label={price === undefined ? def.name : `${def.name}, $${price}`}
+      onPointerEnter={hover?.onPointerEnter}
       onPointerMove={tilt}
-      onPointerLeave={untilt}
+      onPointerLeave={(e) => {
+        untilt(e);
+        hover?.onPointerLeave(e);
+      }}
+      onFocus={hover?.onFocus}
+      onBlur={hover?.onBlur}
       onClick={onSelect}
     >
       <span class={shake ? 'card-face no' : 'card-face'} key={shake}>

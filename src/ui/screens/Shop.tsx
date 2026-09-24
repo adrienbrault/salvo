@@ -1,7 +1,7 @@
-import type { JSX } from 'preact';
+import type { ComponentChildren, JSX } from 'preact';
 import { useRef, useState } from 'preact/hooks';
 import { getItem, resolveRelicDef } from '../../content/registry';
-import { type ItemInstance, sellValue } from '../../content/types';
+import { type ItemDef, type ItemInstance, sellValue } from '../../content/types';
 import { levelSpecFor } from '../../run/levels';
 import { type BuyError, canBuy, rerollCost } from '../../run/shop';
 import { RELIC_SLOTS, type RunState, type ShopOffer } from '../../run/state';
@@ -9,11 +9,13 @@ import { CONSTRAINTS } from '../../sim/constraints';
 import { computeEconomy, computeStats } from '../../sim/stats';
 import { KILL_TYPE_LABEL } from '../../sim/types';
 import { Counter } from '../components/Counter';
+import { type HoverBind, HoverDetail, useHover } from '../components/HoverDetail';
 import { ItemCard, SoldCard } from '../components/ItemCard';
-import { ItemDetail } from '../components/ItemDetail';
+import { copyNote, ItemDetail } from '../components/ItemDetail';
 import { HpPips } from '../components/Pips';
 import { fmt, fmtMoney } from '../format';
 import { game } from '../game';
+import { ABOVE, type Side } from '../place';
 import { ui } from '../store';
 
 type Area = 'offers' | 'workshop';
@@ -24,6 +26,17 @@ type Sel =
   | { area: 'equip'; slot: EquipSlot };
 
 const EQUIP_SLOTS: EquipSlot[] = ['weapon', 'engine', 'core'];
+
+const keyOf = (s: Sel): string => (s.area === 'equip' ? `equip-${s.slot}` : `${s.area}-${s.index}`);
+
+/** What the detail panel and the hover detail both show for a target. */
+interface Detail {
+  def: ItemDef;
+  inst?: ItemInstance;
+  note: ComponentChildren;
+  /** What the panel's buttons say, for the hover detail that has none. */
+  foot: ComponentChildren;
+}
 
 function buyError(err: BuyError, run: RunState, offer: ShopOffer): string {
   switch (err) {
@@ -38,18 +51,12 @@ function buyError(err: BuyError, run: RunState, offer: ShopOffer): string {
   }
 }
 
-/** What a Blueprint in `slot` currently copies. */
-function copyNote(relics: readonly ItemInstance[], slot: number): string | null {
-  if (relics[slot]?.id !== 'blueprint') return null;
-  const target = resolveRelicDef(relics, slot);
-  return target ? `Currently copies: ${target.name}.` : 'Nothing to copy: put a relic to its right.';
-}
-
 export function Shop() {
   void ui.runVersion.value;
   const run = ui.run.value;
   const [sel, setSel] = useState<Sel | null>(null);
   const [shake, setShake] = useState({ key: '', n: 0 });
+  const hover = useHover<Sel>();
   const shop = run?.shop;
   if (!run || !shop) return null;
   const g = game();
@@ -62,10 +69,51 @@ export function Shop() {
   const boss = bossId ? CONSTRAINTS[bossId] : null;
   const maxHp = computeStats(run).maxHp;
 
-  const isSel = (area: Sel['area'], index: number) =>
-    sel !== null && sel.area === area && 'index' in sel && sel.index === index;
-  const toggle = (next: Sel) =>
-    setSel((cur) => (cur && JSON.stringify(cur) === JSON.stringify(next) ? null : next));
+  const selKey = sel ? keyOf(sel) : null;
+  const toggle = (next: Sel) => setSel((cur) => (cur && keyOf(cur) === keyOf(next) ? null : next));
+
+  /** The one description of a target, shared by the panel and the hover detail. */
+  const detailOf = (t: Sel): Detail | null => {
+    if (t.area === 'equip') {
+      const inst = run.loadout[t.slot];
+      return { def: getItem(inst.id), inst, note: null, foot: null };
+    }
+    if (t.area === 'offers' || t.area === 'workshop') {
+      const o = shop[t.area][t.index];
+      if (!o?.id) return null;
+      const def = getItem(o.id);
+      const err = canBuy(run, o);
+      let note: string | null = null;
+      if (def.kind === 'weapon' || def.kind === 'engine' || def.kind === 'core') {
+        const old = run.loadout[def.kind];
+        note = `Replaces ${getItem(old.id).name} (sold back for $${sellValue(old)}).`;
+      } else if (def.kind === 'calibration' && def.killType) {
+        note = `Current ${KILL_TYPE_LABEL[def.killType]} level: ${run.calibrations[def.killType]}.`;
+      } else if (def.id === 'repair' || def.id === 'mod_hull') {
+        note = `Hull: ${run.hp}/${maxHp} HP.`;
+      }
+      return { def, note, foot: err && <span class="detail-warn">{buyError(err, run, o)}</span> };
+    }
+    if (t.area === 'relics') {
+      const inst = run.loadout.relics[t.index];
+      if (!inst) return null;
+      return {
+        def: getItem(inst.id),
+        inst,
+        note: copyNote(run.loadout.relics, t.index),
+        foot: (
+          <>
+            Sells for <span class="mk-money">${sellValue(inst)}</span> · drag to reorder
+          </>
+        ),
+      };
+    }
+    return null;
+  };
+
+  const bindHover = (t: Sel, sides?: readonly Side[]): HoverBind => hover.bind(t, keyOf(t), sides);
+  // The selected item is already in the panel: no second copy beside it.
+  const hovered = hover.at && hover.at.key !== selKey ? detailOf(hover.at.target) : null;
 
   const buy = (area: Area, index: number) => {
     const offer = shop[area][index];
@@ -92,9 +140,10 @@ export function Shop() {
           def={getItem(o.id)}
           price={o.price}
           dim={canBuy(run, o) === 'money'}
-          selected={isSel(area, i)}
+          selected={selKey === k}
           shake={shake.key === k ? shake.n : 0}
           delay={i * 90}
+          hover={bindHover({ area, index: i })}
           onSelect={() => toggle({ area, index: i })}
         />,
       );
@@ -102,81 +151,62 @@ export function Shop() {
     return out;
   };
 
+  const d = sel && detailOf(sel);
   let detail: JSX.Element | null = null;
-  if (sel && (sel.area === 'offers' || sel.area === 'workshop')) {
-    const o = shop[sel.area][sel.index];
-    if (o?.id) {
-      const def = getItem(o.id);
-      const err = canBuy(run, o);
-      let note: string | null = null;
-      if (def.kind === 'weapon' || def.kind === 'engine' || def.kind === 'core') {
-        const old = run.loadout[def.kind];
-        note = `Replaces ${getItem(old.id).name} (sold back for $${sellValue(old)}).`;
-      } else if (def.kind === 'calibration' && def.killType) {
-        note = `Current ${KILL_TYPE_LABEL[def.killType]} level: ${run.calibrations[def.killType]}.`;
-      } else if (def.id === 'repair' || def.id === 'mod_hull') {
-        note = `Hull: ${run.hp}/${maxHp} HP.`;
-      }
-      const { area, index } = sel;
-      detail = (
-        <ItemDetail def={def} note={note} onClose={() => setSel(null)}>
-          {err && <p class="detail-warn">{buyError(err, run, o)}</p>}
-          <button type="button" class={err ? 'btn buy off' : 'btn buy'} onClick={() => buy(area, index)}>
-            Buy <b>${o.price}</b>
-          </button>
-        </ItemDetail>
-      );
-    }
-  } else if (sel?.area === 'relics') {
+  if (sel && d && (sel.area === 'offers' || sel.area === 'workshop')) {
+    const o = shop[sel.area][sel.index]!;
+    const err = canBuy(run, o);
+    const { area, index } = sel;
+    detail = (
+      <ItemDetail def={d.def} note={d.note} onClose={() => setSel(null)}>
+        {err && <p class="detail-warn">{buyError(err, run, o)}</p>}
+        <button type="button" class={err ? 'btn buy off' : 'btn buy'} onClick={() => buy(area, index)}>
+          Buy <b>${o.price}</b>
+        </button>
+      </ItemDetail>
+    );
+  } else if (sel?.area === 'relics' && d?.inst) {
     const relics = run.loadout.relics;
     const i = sel.index;
-    const inst = relics[i];
-    if (inst) {
-      const move = (to: number) => {
-        g.move(i, to);
-        setSel({ area: 'relics', index: to });
-      };
-      detail = (
-        <ItemDetail
-          def={getItem(inst.id)}
-          inst={inst}
-          note={copyNote(relics, i)}
-          onClose={() => setSel(null)}
+    const inst = d.inst;
+    const move = (to: number) => {
+      g.move(i, to);
+      setSel({ area: 'relics', index: to });
+    };
+    detail = (
+      <ItemDetail def={d.def} inst={inst} note={d.note} onClose={() => setSel(null)}>
+        <button
+          type="button"
+          class="btn small"
+          aria-label="Move left"
+          disabled={i === 0}
+          onClick={() => move(i - 1)}
         >
-          <button
-            type="button"
-            class="btn small"
-            aria-label="Move left"
-            disabled={i === 0}
-            onClick={() => move(i - 1)}
-          >
-            ◀
-          </button>
-          <button
-            type="button"
-            class="btn small"
-            aria-label="Move right"
-            disabled={i === relics.length - 1}
-            onClick={() => move(i + 1)}
-          >
-            ▶
-          </button>
-          <button
-            type="button"
-            class="btn danger"
-            onClick={() => {
-              g.sell(i);
-              setSel(null);
-            }}
-          >
-            Sell <b>+${sellValue(inst)}</b>
-          </button>
-        </ItemDetail>
-      );
-    }
-  } else if (sel?.area === 'equip') {
-    const inst = run.loadout[sel.slot];
-    detail = <ItemDetail def={getItem(inst.id)} inst={inst} onClose={() => setSel(null)} />;
+          ◀
+        </button>
+        <button
+          type="button"
+          class="btn small"
+          aria-label="Move right"
+          disabled={i === relics.length - 1}
+          onClick={() => move(i + 1)}
+        >
+          ▶
+        </button>
+        <button
+          type="button"
+          class="btn danger"
+          onClick={() => {
+            g.sell(i);
+            setSel(null);
+          }}
+        >
+          Sell <b>+${sellValue(inst)}</b>
+        </button>
+      </ItemDetail>
+    );
+  } else if (d) {
+    detail = <ItemDetail def={d.def} inst={d.inst} note={d.note} onClose={() => setSel(null)} />;
   }
 
   return (
@@ -230,6 +260,8 @@ export function Shop() {
           <RelicTray
             run={run}
             selected={sel?.area === 'relics' ? sel.index : -1}
+            hover={(i) => bindHover({ area: 'relics', index: i }, ABOVE)}
+            onGrab={hover.hide}
             onSelect={(i) => toggle({ area: 'relics', index: i })}
             onMove={(from, to) => {
               g.move(from, to);
@@ -247,6 +279,7 @@ export function Shop() {
                   class={on ? 'equip selected' : 'equip'}
                   style={{ '--c': def.color }}
                   aria-pressed={on}
+                  {...bindHover({ area: 'equip', slot }, ABOVE)}
                   onClick={() => toggle({ area: 'equip', slot })}
                 >
                   <span class="equip-glyph">{def.glyph}</span>
@@ -260,7 +293,14 @@ export function Shop() {
 
       <aside class="shop-side">
         <div class="shop-detail" key={sel ? JSON.stringify(sel) : 'none'}>
-          {detail ?? <p class="shop-empty">Tap a card to read what it does.</p>}
+          {detail ?? (
+            <p class="shop-empty">
+              <span class="on-touch">Tap a card to read what it does.</span>
+              <span class="on-hover">
+                Point at anything to read it. Click a card to buy it, or a relic to move or sell it.
+              </span>
+            </p>
+          )}
         </div>
         <div class="shop-next panel">
           <p>
@@ -289,6 +329,11 @@ export function Shop() {
       <button type="button" class="btn go big shop-leave" onClick={() => g.leaveShop()}>
         Continue
       </button>
+      <HoverDetail at={hover.at}>
+        {hovered && (
+          <ItemDetail def={hovered.def} inst={hovered.inst} note={hovered.note} foot={hovered.foot} />
+        )}
+      </HoverDetail>
     </div>
   );
 }
@@ -296,12 +341,15 @@ export function Shop() {
 interface TrayProps {
   run: RunState;
   selected: number;
+  hover(i: number): HoverBind;
+  /** A press may start a drag: the hover detail gets out of the way. */
+  onGrab(): void;
   onSelect(i: number): void;
   onMove(from: number, to: number): void;
 }
 
 /** Owned relics: tap to inspect, drag to reorder (mouse or touch). */
-function RelicTray({ run, selected, onSelect, onMove }: TrayProps) {
+function RelicTray({ run, selected, hover, onGrab, onSelect, onMove }: TrayProps) {
   const relics = run.loadout.relics;
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const drag = useRef<{ from: number; id: number; x0: number; y0: number; active: boolean } | null>(null);
@@ -352,6 +400,7 @@ function RelicTray({ run, selected, onSelect, onMove }: TrayProps) {
     const cls = ['tray-slot', 'tray-relic'];
     if (selected === i) cls.push('selected');
     if (over?.from === i) cls.push('dragging');
+    const h = hover(i);
     slots.push(
       <button
         type="button"
@@ -363,8 +412,13 @@ function RelicTray({ run, selected, onSelect, onMove }: TrayProps) {
         style={{ '--c': def.color, '--shift': shift }}
         aria-pressed={selected === i}
         aria-label={`${i + 1}. ${def.name}`}
+        onPointerEnter={h.onPointerEnter}
+        onPointerLeave={h.onPointerLeave}
+        onFocus={h.onFocus}
+        onBlur={h.onBlur}
         onPointerDown={(e) => {
           if (e.pointerType === 'mouse' && e.button !== 0) return;
+          onGrab();
           // A drag ending outside its button fires no click, so clear the swallow flag here.
           dragged.current = false;
           drag.current = { from: i, id: e.pointerId, x0: e.clientX, y0: e.clientY, active: false };
