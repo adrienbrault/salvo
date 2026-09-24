@@ -824,7 +824,17 @@ function macroTexture(size: number, noise: NoiseSet, anisotropy: number): DataTe
   return t;
 }
 
-const nextFrame = () => new Promise<void>((r) => setTimeout(r, 0));
+/**
+ * Yields to the event loop between layers (so the loading screen stays alive). A message
+ * rather than a timer: timers in a background tab are throttled to one a second or slower,
+ * which would stall boot for minutes if the player switches tabs while it loads.
+ */
+const nextFrame = () =>
+  new Promise<void>((r) => {
+    const ch = new MessageChannel();
+    ch.port1.onmessage = () => r();
+    ch.port2.postMessage(0);
+  });
 
 export async function generateHullTextures(size: number, anisotropy = 8): Promise<HullTextureSet> {
   const rng = new Rng('hull-noise');
