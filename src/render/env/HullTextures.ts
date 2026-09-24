@@ -9,6 +9,7 @@ import {
   UnsignedByteType,
 } from 'three/webgpu';
 import { Rng } from '../../sim/rng';
+import { yieldTask } from '../yieldTask';
 
 /**
  * Procedural PBR texture set for the megastructure, generated at boot (no downloaded assets),
@@ -824,28 +825,6 @@ function macroTexture(size: number, noise: NoiseSet, anisotropy: number): DataTe
   return t;
 }
 
-let yieldChannel: MessageChannel | null = null;
-const yielded: (() => void)[] = [];
-
-/**
- * Yields to the event loop between layers (so the loading screen stays alive). A message
- * rather than a timer: timers in a background tab are throttled to one a second or slower,
- * which would stall boot for minutes if the player switches tabs while it loads. One channel,
- * held for good: a throwaway MessageChannel can be garbage collected before its message is
- * delivered, and boot then waits forever.
- */
-function nextFrame(): Promise<void> {
-  if (!yieldChannel) {
-    yieldChannel = new MessageChannel();
-    yieldChannel.port1.onmessage = () => yielded.shift()?.();
-  }
-  const ch = yieldChannel;
-  return new Promise<void>((r) => {
-    yielded.push(r);
-    ch.port2.postMessage(0);
-  });
-}
-
 export async function generateHullTextures(
   size: number,
   anisotropy = 8,
@@ -875,7 +854,7 @@ export async function generateHullTextures(
     for (let i = 0; i < layerBytes; i += 4) o[i + 3] = h[i]!;
     orm.set(o, off);
     heightToNormal(h, size, (7 * size) / REF, normal, off);
-    await nextFrame();
+    await yieldTask();
   }
   return {
     albedo: arrayTexture(albedo, size, true, anisotropy),
