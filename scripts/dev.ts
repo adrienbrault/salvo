@@ -3,7 +3,7 @@
  * Listens on all interfaces so a phone on the same LAN can connect.
  *
  * WebGPU requires a secure context: over plain http on a LAN IP the game falls back to WebGL2.
- * Set TLS_CERT / TLS_KEY (PEM paths) to serve https — see docs/mobile-testing.md.
+ * Set TLS_CERT / TLS_KEY (PEM paths) to serve https — see docs/browser-testing.md.
  */
 import { networkInterfaces } from 'node:os';
 import index from '../index.html';
