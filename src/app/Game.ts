@@ -34,6 +34,7 @@ export class Game {
   private acc = 0;
   private hitStop = 0;
   private hudT = 0;
+  private startQueued = false;
   private readonly store: KeyValueStore | null = browserStore();
   records: Records;
 
@@ -87,6 +88,18 @@ export class Game {
   startLevel(): void {
     const run = this.run;
     if (!run) return;
+    // Gameplay shaders compile behind the menus; a quick player waits for the last of them.
+    if (!this.gr.gameplayCompiled) {
+      if (!this.startQueued) {
+        this.startQueued = true;
+        toast('Compiling shaders…');
+        void this.gr.gameplayReady.then(() => {
+          this.startQueued = false;
+          this.startLevel();
+        });
+      }
+      return;
+    }
     run.shop = null;
     this.world = new World(run, currentSpec(run), levelRng(run));
     this.acc = 0;

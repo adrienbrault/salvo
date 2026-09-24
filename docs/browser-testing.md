@@ -24,7 +24,9 @@ Frame rate in a hidden window is unreliable, but GPU timestamps are not. On WebG
 
 ## Hitches
 
-A frame that stalls for hundreds of milliseconds is almost always a pipeline built mid-game. Count them: in a Playwright init script, wrap `GPUDevice.prototype.createRenderPipeline` and `createComputePipeline` (and their `Async` variants), perform the suspect action (a resize, `gr.setTheme`, `game.startLevel`) and let a few frames pass: after boot the count stays at zero. To see what changed, wrap `createShaderModule` too and diff the new WGSL against the earlier modules. CDP's `Emulation.setCPUThrottlingRate` (4×) stands in for a slow device.
+A frame that stalls for hundreds of milliseconds is almost always a pipeline built mid-game. Count them: in a Playwright init script, wrap `GPUDevice.prototype.createRenderPipeline` and `createComputePipeline` (and their `Async` variants), perform the suspect action (a resize, `gr.setTheme`, `game.startLevel`) and let a few frames pass: after boot the count stays at zero. To see what changed, wrap `createShaderModule` too and diff the new WGSL against the earlier modules. On WebGL, count `WebGL2RenderingContext.prototype.linkProgram` calls instead. CDP's `Emulation.setCPUThrottlingRate` (4×) stands in for a slow device.
+
+A pipeline compiled ahead with the wrong state renders wrong without an error (unlit hulls, broken shadows). After a change to warm-up, compare every draw's shaders with a known-good build: an own `renderer._renderObjectDirect` that calls the prototype's, then records `renderer._objects.get(...).getNodeBuilderState()` (vertex and fragment shader) per object, material and render target; only buffer ids may differ. Check WebGL in WebKit: headless Chrome's WebGL renders a blank frame.
 
 ## Safari (WebKit)
 

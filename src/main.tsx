@@ -95,10 +95,11 @@ async function boot(): Promise<void> {
   } catch (err) {
     console.error(err);
     ui.bootError.value = err instanceof Error ? err.message : String(err);
-    return;
-  } finally {
     removeYield();
+    return;
   }
+  // Gameplay shaders keep compiling behind the menus, with the same yield.
+  void gr.gameplayReady.finally(removeYield);
   ui.backend.value = { api: gr.isWebGPU ? 'WebGPU' : 'WebGL 2', tier: gr.quality.tier };
 
   let game: Game | null = null;
@@ -157,6 +158,7 @@ async function boot(): Promise<void> {
   const quick = params.get('quick');
   if (quick) {
     game.newRun(quick, params.get('seed') ?? undefined);
+    await gr.gameplayReady;
     game.startLevel();
   } else {
     game.toTitle();

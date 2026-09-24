@@ -4,11 +4,13 @@ three.js r186 `WebGPURenderer` with TSL node materials. WebGPU is the target; th
 
 ## Pipeline stability
 
-A pipeline compile stalls a frame for 50–500 ms, so every pipeline exists by the end of `GameRenderer.warmup()` and gameplay only changes uniforms, geometry, instance counts and visibility.
+A pipeline compile stalls a frame for 50–500 ms, so none happens during play: gameplay only changes uniforms, geometry, instance counts and visibility, and every pipeline is compiled ahead by a `FrameCompiler` (`precompile.ts`).
 
+- Boot compiles what the title screen draws (the loading bar follows it); what only play draws compiles on title and menu frames, and a level waits for `gameplayReady`. Both render unculled frames, so a wider screen or a later stretch of trench needs nothing new.
+- A capture frame renders every pass for real, minus the draws whose pipelines don't exist yet; each of those is then built with the state it had in the frame (the pass's context, the lights, an override material's nodes) and its pipeline compiled asynchronously. `renderer.compileAsync` sees none of the passes' context and compiles pipelines the post chain never uses.
 - Lights come from the fixed `LightPool` (point lights are never added or removed; requests compete for the pool each frame).
 - Variation is data: biome palettes, floor modes, haze and sky are uniforms; biome surfaces are texture-layer indices (`aInfo.x`, remapped per biome), never new materials.
-- A new kind of object is on screen during warmup. Sharing a warmed object's material and flags is not enough for an `InstancedMesh`: three names its matrix buffer after the mesh, so each one compiles pipelines of its own (`Trench.prewarm` shows the asteroid field, absent from the first biome).
+- A new kind of object goes into `GameRenderer.showGameplay`, which puts one of everything play draws on screen for the capture frames. Sharing a warmed object's material and flags is not enough for an `InstancedMesh`: three names its matrix buffer after the mesh, so each one compiles pipelines of its own (`Trench.prewarm` shows the asteroid field, absent from the first biome).
 - The space environment re-bakes into the same PMREM target, so `scene.environment` keeps its identity across biomes.
 - Shader code never depends on the canvas size, so resizes, rotations and dynamic resolution only reallocate render targets. Clustered lighting uses a fixed tile grid (`FixedClusteredLighting.ts`): three's own sizes the grid from the drawing buffer and bakes it into every lit shader, so each resize recompiled ~40 pipelines.
 

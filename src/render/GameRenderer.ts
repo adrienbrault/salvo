@@ -6,6 +6,7 @@ import {
   DirectionalLight,
   HemisphereLight,
   type Node,
+  type Object3D,
   PCFShadowMap,
   Scene,
   Vector3,
@@ -29,7 +30,9 @@ import { LightPool } from './fx/Lights';
 import { Particles } from './fx/Particles';
 import { Post } from './Post';
 import { hueColor } from './palette';
+import { FrameCompiler } from './precompile';
 import { autoTier, DynamicResolution, pixelRatioFor, type Quality, TIERS, type Tier } from './quality';
+import { yieldTask } from './yieldTask';
 
 export interface RendererOptions {
   canvas: HTMLCanvasElement;
@@ -76,6 +79,10 @@ export class GameRenderer {
   private readonly ship: PlayerShip;
   private shipOn = false;
   private readonly shipLight = new Color(0x6fd8ff);
+  /** Compiles what only play draws, on title and menu frames (see `warmup`). */
+  private gameplayWarm: FrameCompiler | null = null;
+  /** Resolves once everything play draws is compiled; levels wait for it. */
+  gameplayReady: Promise<void> = Promise.resolve();
   private width = 1;
   private height = 1;
   private insets: Insets = { top: 0, bottom: 0 };
@@ -259,28 +266,54 @@ export class GameRenderer {
   }
 
   /**
-   * Compile every pipeline up front (all enemy kinds, bullet styles, boss, ship, post, compute)
-   * so nothing stalls the first time it appears in play.
+   * Compiles every pipeline the title screen draws (environment, sea, post chain), then leaves
+   * what only play draws (ship, every enemy kind and bullet style, boss, asteroids) to compile
+   * on title and menu frames: the game opens sooner, and a level waits for `gameplayReady`.
    */
-  private async warmup(): Promise<void> {
-    this.setChassis(CHASSIS[0]!);
-    this.ship.group.visible = true;
-    this.enemies.warm(true);
-    this.trench.prewarm(true);
-    const fake = WARM_BULLETS;
-    this.bullets.update(fake, WARM_VIEW);
-    this.shots.update(fake, WARM_VIEW);
+  private async warmup(onProgress?: (done: number, total: number) => void): Promise<void> {
     this.rig.fit(400, 700);
-    await this.renderer.compileAsync(this.scene, this.rig.camera);
     this.particles.update(1 / 60, 0, 0);
     this.sea.update(1 / 60);
     this.post.update(1 / 60, 400, 700);
-    this.post.render();
-    this.enemies.warm(false);
-    this.trench.prewarm(false);
-    this.bullets.update([], WARM_VIEW);
-    this.shots.update([], WARM_VIEW);
-    this.setChassis(null);
+    const boot = new FrameCompiler(this.renderer, { yieldNow: yieldTask, sliceMs: 50 }, onProgress);
+    await boot.run(() => this.renderUnculled());
+    const gameplay = new FrameCompiler(this.renderer, { yieldNow: yieldTask, sliceMs: 0 });
+    this.gameplayWarm = gameplay;
+    this.gameplayReady = gameplay.finished;
+  }
+
+  /** Whether everything play draws is compiled (`gameplayReady` has resolved). */
+  get gameplayCompiled(): boolean {
+    return this.gameplayWarm === null;
+  }
+
+  /**
+   * A frame with frustum culling off, for warm-up captures: whatever a camera might see (on a
+   * wider screen, further down the trench) gets compiled, not only what this one frame shows.
+   */
+  private renderUnculled(): void {
+    const culled: Object3D[] = [];
+    this.scene.traverse((o) => {
+      if (o.frustumCulled) {
+        culled.push(o);
+        o.frustumCulled = false;
+      }
+    });
+    try {
+      this.post.render();
+    } finally {
+      for (const o of culled) o.frustumCulled = true;
+    }
+  }
+
+  /** Puts one of everything play draws on screen, for capturing warm-up frames. */
+  private showGameplay(on: boolean): void {
+    this.setChassis(on ? CHASSIS[0]! : null);
+    this.ship.group.visible = on;
+    this.enemies.warm(on);
+    this.trench.prewarm(on);
+    this.bullets.update(on ? WARM_BULLETS : [], WARM_VIEW);
+    this.shots.update(on ? WARM_BULLETS : [], WARM_VIEW);
   }
 
   setChassis(ch: ChassisDef | null): void {
@@ -346,6 +379,16 @@ export class GameRenderer {
 
     if (this.dynRes.sample(frameMs) !== null) this.applyPixelRatio();
 
+    // Gameplay warm-up: a capture frame with one of everything on screen, replaced by this one.
+    const warm = this.gameplayWarm;
+    if (warm && !world) {
+      warm.step(() => {
+        this.showGameplay(true);
+        this.renderUnculled();
+        this.showGameplay(false);
+      });
+      if (warm.isFinished) this.gameplayWarm = null;
+    }
     this.post.render();
   }
 }
