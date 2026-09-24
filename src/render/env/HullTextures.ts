@@ -846,7 +846,11 @@ function nextFrame(): Promise<void> {
   });
 }
 
-export async function generateHullTextures(size: number, anisotropy = 8): Promise<HullTextureSet> {
+export async function generateHullTextures(
+  size: number,
+  anisotropy = 8,
+  onLayer?: (layer: number, count: number) => void,
+): Promise<HullTextureSet> {
   const rng = new Rng('hull-noise');
   const noise: NoiseSet = {
     blotch: tileNoise(size, 4, 4, 5, rng),
@@ -860,6 +864,7 @@ export async function generateHullTextures(size: number, anisotropy = 8): Promis
   const normal = new Uint8Array(layerBytes * LAYER_COUNT);
   const emissive = new Uint8Array(layerBytes * LAYER_COUNT);
   for (let layer = 0; layer < LAYER_COUNT; layer++) {
+    onLayer?.(layer, LAYER_COUNT);
     const p = new Painter(size, `hull/${layer}`, noise);
     paintLayer(p, layer);
     const off = layer * layerBytes;

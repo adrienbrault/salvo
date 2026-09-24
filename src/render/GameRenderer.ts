@@ -35,6 +35,8 @@ export interface RendererOptions {
   canvas: HTMLCanvasElement;
   forceWebGL?: boolean;
   tier?: Tier | 'auto';
+  /** Called as boot moves through its slow steps (shown on the loading screen). */
+  onStage?: (stage: string) => void;
 }
 
 /** Key light ("sun"): low, from the upper left, so shadows run long across the deck. */
@@ -167,6 +169,12 @@ export class GameRenderer {
   }
 
   static async create(o: RendererOptions): Promise<GameRenderer> {
+    const t0 = performance.now();
+    const stage = (s: string) => {
+      console.info(`[boot] ${s} +${Math.round(performance.now() - t0)} ms`);
+      o.onStage?.(s);
+    };
+    stage('Starting the GPU…');
     const renderer = new WebGPURenderer({
       canvas: o.canvas,
       antialias: false,
@@ -185,11 +193,16 @@ export class GameRenderer {
     renderer.setPixelRatio(
       pixelRatioFor(q, window.innerWidth, window.innerHeight, window.devicePixelRatio || 1),
     );
+    stage(`Loading fonts… (${isWebGPU ? 'WebGPU' : 'WebGL 2'}, ${tier})`);
     // Stencils on the hull use the UI font: make sure it is loaded before painting.
     await document.fonts?.load('700 32px "Chakra Petch"').catch(() => undefined);
-    const hull = await generateHullTextures(q.hullTexture, Math.min(8, renderer.getMaxAnisotropy()));
+    const hull = await generateHullTextures(q.hullTexture, Math.min(8, renderer.getMaxAnisotropy()), (i, n) =>
+      stage(`Painting textures ${i + 1}/${n}…`),
+    );
+    stage('Compiling shaders…');
     const gr = new GameRenderer(renderer, q, isWebGPU, hull);
     await gr.warmup();
+    stage('Ready');
     return gr;
   }
 

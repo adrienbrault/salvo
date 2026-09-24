@@ -86,6 +86,9 @@ async function boot(): Promise<void> {
       canvas,
       forceWebGL: settings.forceWebGL || params.has('webgl'),
       tier: tierParam ?? settings.quality,
+      onStage: (s) => {
+        ui.bootStage.value = s;
+      },
     });
   } catch (err) {
     console.error(err);

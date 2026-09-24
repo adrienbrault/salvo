@@ -93,6 +93,8 @@ export const ui = {
   hasSave: signal(false),
   toast: signal<{ id: number; text: string } | null>(null),
   bootError: signal<string | null>(null),
+  /** The boot step in progress (the loading screen shows it). */
+  bootStage: signal('Preparing the renderer…'),
 };
 
 let toastId = 0;

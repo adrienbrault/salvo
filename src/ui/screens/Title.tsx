@@ -9,7 +9,7 @@ export function Boot() {
       <div class="boot-bar" role="progressbar" aria-label="Loading">
         <i />
       </div>
-      <p class="boot-text">Preparing the renderer…</p>
+      <p class="boot-text">{ui.bootStage.value}</p>
     </div>
   );
 }
