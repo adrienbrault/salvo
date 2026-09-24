@@ -17,6 +17,7 @@ const SOUNDS = {
   absorb: [0.14, 0.05, 900, 0, 0.01, 0.08, 0, 1, 20],
   release: [0.8, 0.05, 400, 0.01, 0.1, 0.4, 2, 1, 15, 0, 0, 0, 0, 0, 0, 0, 0.05],
   coin: [0.45, 0.02, 1200, 0, 0.03, 0.15, 1, 1.5, 0, 0, 400, 0.05],
+  shard: [0.16, 0.02, 1500, 0, 0.01, 0.07, 0, 1.2, 25, 0, 250, 0.03],
   buy: [0.55, 0, 700, 0.01, 0.05, 0.2, 1, 1, 0, 0, 300, 0.06],
   reroll: [0.4, 0.05, 500, 0, 0.08, 0.1, 1, 1, 20, 0, 0, 0, 0.05],
   error: [0.4, 0.02, 150, 0, 0.05, 0.1, 2, 1, -5],
@@ -41,6 +42,7 @@ const THROTTLE: Partial<Record<SoundId, number>> = {
   absorb: 0.05,
   relic: 0.06,
   coin: 0.05,
+  shard: 0.03,
 };
 
 /**
@@ -53,6 +55,8 @@ export class Audio {
   private readonly sfxBus: GainNode;
   private readonly buffers = new Map<SoundId, AudioBuffer>();
   private readonly lastPlay = new Map<SoundId, number>();
+  private shardRun = 0;
+  private shardAt = 0;
   readonly music: Music;
 
   constructor() {
@@ -127,6 +131,14 @@ export class Audio {
         case 'playerDeath':
           this.play('death');
           break;
+        case 'pickup': {
+          // A run of shards climbs in pitch.
+          const now = this.ctx.currentTime;
+          this.shardRun = now - this.shardAt < 0.5 ? Math.min(this.shardRun + 1, 12) : 0;
+          this.shardAt = now;
+          this.play('shard', 1, 1 + this.shardRun * 0.06, pan(e.x));
+          break;
+        }
         case 'graze':
           this.play('graze', e.close ? 0.9 : 0.5, e.close ? 1.3 : 1, pan(e.x));
           break;
