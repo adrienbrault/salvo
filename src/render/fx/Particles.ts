@@ -36,9 +36,10 @@ import {
 } from 'three/webgpu';
 import { FLOOR_Z, SCROLL_SPEED } from '../palette';
 
-export type ParticleKind = 'spark' | 'ember' | 'debris';
-const KIND_ID: Record<ParticleKind, number> = { spark: 0, ember: 1, debris: 2 };
+export type ParticleKind = 'spark' | 'ember' | 'debris' | 'flame';
 const MOTE = 3;
+const KIND_ID: Record<ParticleKind, number> = { spark: 0, ember: 1, debris: 2, flame: 4 };
+const FLAME = KIND_ID.flame;
 
 const MAX_EMIT = 32;
 const MAX_SHOCKS = 8;
@@ -63,7 +64,7 @@ export interface EmitSpec {
 
 /**
  * GPU particles (compute): explosion sparks that fall and bounce on the sea, embers, glowing
- * debris, plus a permanent field of "motes" drifting between the sea and the battle that the
+ * debris, flames licking up from wreckage, plus a permanent field of "motes" drifting between the sea and the battle that the
  * ship and every shockwave push around.
  *
  * Spawning happens inside the single update kernel (each particle checks whether its index is
@@ -210,8 +211,10 @@ export class Particles {
           // ── Simulate ──
           const kind = c.w.div(8).floor();
           const isSpark = kind.equal(0);
-          const drag = mix(float(1.1), float(2.6), isSpark.select(1, 0));
-          const grav = kind.equal(1).select(-6, kind.equal(2).select(-90, -55));
+          const isFlame = kind.equal(FLAME);
+          const drag = isSpark.select(2.6, isFlame.select(1.8, 1.1));
+          // Flames rise; everything else falls.
+          const grav = kind.equal(1).select(-6, kind.equal(2).select(-90, isFlame.select(24, -55)));
           const vv = v.xyz.toVar();
           vv.mulAssign(float(1).sub(dt.mul(drag)).max(0));
           vv.z.addAssign(grav.mul(dt));
@@ -226,7 +229,9 @@ export class Particles {
             vv.addAssign(vec3(toS.div(dS).mul(ring.mul(s.w).mul(dt)), 0));
           });
           const np = p.xyz.add(vv.mul(dt)).toVar();
-          np.y.subAssign(float(SCROLL_SPEED).mul(dt).mul(np.z.lessThan(-8).select(1, 0.3)));
+          // Down in the environment particles scroll with it; up in the play plane, only partly.
+          const ground = isFlame.or(np.z.lessThan(-8)).select(1, 0.3);
+          np.y.subAssign(float(SCROLL_SPEED).mul(dt).mul(ground));
           If(np.z.lessThan(floorZ), () => {
             np.z.assign(floorZ);
             vv.z.assign(vv.z.abs().mul(0.38));
@@ -252,18 +257,26 @@ export class Particles {
     const size = cAttr.w.sub(kind.mul(8));
     const lifeT = pAttr.w.div(max(vAttr.w, 0.001)).clamp(0, 1);
     const isMote = kind.equal(MOTE);
+    const isFlame = kind.equal(FLAME);
     const speedXY = vAttr.xy.length();
     const stretch = kind.equal(0).select(min(float(1).add(speedXY.mul(0.035)), 5), float(1));
     const alive = isMote.or(pAttr.w.greaterThan(0));
     const fade = isMote.select(
       float(0.12).add(min(speedXY.mul(0.035), 1.2)),
-      smoothstep(0, 0.3, lifeT).mul(kind.equal(1).select(sin(lifeT.mul(Math.PI)), float(1))),
+      smoothstep(0, 0.3, lifeT).mul(
+        kind
+          .equal(1)
+          .or(isFlame)
+          .select(sin(lifeT.mul(Math.PI)), float(1)),
+      ),
     );
     const moteCol = vec3(this.theme.x, this.theme.y, this.theme.z).mul(0.6).add(0.1);
-    const baseCol = isMote.select(moteCol, cAttr.xyz);
+    // Flames cool from yellow-white to deep red as they rise, and billow out.
+    const flameCol = cAttr.xyz.mul(mix(vec3(0.55, 0.16, 0.06), vec3(1.3, 1, 0.75), lifeT));
+    const baseCol = isMote.select(moteCol, isFlame.select(flameCol, cAttr.xyz));
     mat.positionNode = pAttr.xyz;
     mat.rotationNode = atan(vAttr.y, vAttr.x);
-    const s = alive.select(size, float(0));
+    const s = alive.select(size, float(0)).mul(isFlame.select(mix(2, 0.8, lifeT), float(1)));
     mat.scaleNode = vec2(s.mul(stretch), s);
     const r = uv().sub(0.5).length().mul(2);
     const shape = smoothstep(1, 0, r).pow(1.6);
