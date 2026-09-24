@@ -32,6 +32,9 @@ export function hueColor(h: Hue): Color {
  */
 export const DANGER = new Color(0xff2ad0);
 
+/** Mult shards, the level's loot: mint, which no bullet, shot or enemy wears. */
+export const SHARD = new Color(0x3dffb4);
+
 /** Height of the gameplay plane above which nothing is simulated (render-only depth). */
 export const PLAY_Z = 0;
 /** The liquid-metal river at the bottom of the trench. */

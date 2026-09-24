@@ -6,7 +6,7 @@ import type { CameraRig } from '../CameraRig';
 import type { Sea } from '../env/Sea';
 import type { Trench, Wreck } from '../env/Trench';
 import type { Post } from '../Post';
-import { DANGER, hueColor } from '../palette';
+import { DANGER, hueColor, SHARD } from '../palette';
 import type { LightPool } from './Lights';
 import type { Particles } from './Particles';
 
@@ -231,6 +231,20 @@ export class FxDirector {
           this.sea.drop(e.x, e.y, 26, 3);
           this.trench.damage(e.x, e.y, 60, 4);
           this.sea.scorch(e.x, e.y, 10, 1);
+          break;
+        case 'pickup':
+          this.particles.emit({
+            x: e.x,
+            y: e.y,
+            count: 5,
+            speed: [8, 22],
+            life: 0.35,
+            size: 0.45,
+            color: SHARD,
+            intensity: 3,
+            kind: 'spark',
+            zBias: 0.2,
+          });
           break;
         case 'graze':
           this.particles.emit({

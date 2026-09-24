@@ -28,6 +28,7 @@ import { FixedClusteredLighting } from './FixedClusteredLighting';
 import { FxDirector } from './fx/FxDirector';
 import { LightPool } from './fx/Lights';
 import { Particles } from './fx/Particles';
+import { PickupLayer } from './Pickups';
 import { Post } from './Post';
 import { DANGER, hueColor } from './palette';
 import { FrameCompiler } from './precompile';
@@ -77,6 +78,7 @@ export class GameRenderer {
   private readonly enemies: EnemyLayer;
   private readonly bullets: BulletLayer;
   private readonly shots: BulletLayer;
+  private readonly pickups: PickupLayer;
   private readonly particles: Particles;
   private readonly lights: LightPool;
   private readonly key: DirectionalLight;
@@ -151,7 +153,8 @@ export class GameRenderer {
     this.enemies = new EnemyLayer(scene);
     this.bullets = new BulletLayer(3000, 0.5, true);
     this.shots = new BulletLayer(800, 0.4);
-    scene.add(this.bullets.mesh, this.shots.mesh);
+    this.pickups = new PickupLayer();
+    scene.add(this.bullets.mesh, this.shots.mesh, this.pickups.mesh);
     this.particles = new Particles(renderer, scene, quality.particles, quality.motes);
     this.lights = new LightPool(scene, quality.lights);
     this.post = new Post(renderer, scene, this.rig.camera, {
@@ -170,6 +173,7 @@ export class GameRenderer {
       this.enemies.group,
       this.bullets.mesh,
       this.shots.mesh,
+      this.pickups.mesh,
       this.particles.sprite,
       this.ship.group,
       ...this.ship.ghosts,
@@ -338,6 +342,7 @@ export class GameRenderer {
     this.trench.prewarm(on);
     this.bullets.update(on ? WARM_BULLETS : [], WARM_VIEW);
     this.shots.update(on ? WARM_BULLETS : [], WARM_VIEW);
+    this.pickups.update(on ? WARM_PICKUPS : [], 1, 0);
   }
 
   setChassis(ch: ChassisDef | null): void {
@@ -372,6 +377,7 @@ export class GameRenderer {
       const view = { alpha, fogRadius: fog, playerX: px, playerY: py, z: 0.6 };
       this.bullets.update(world.bullets.items, view);
       this.shots.update(world.shots.items, { ...view, fogRadius: 0, z: 0.3 });
+      this.pickups.update(world.pickups.items, alpha, t);
 
       // Engines light the sea; wake ripples trail behind the ship.
       if (p?.alive) {
@@ -436,6 +442,7 @@ const WARM_BULLETS = WARM_STYLES.map(
       age: 1,
     }) as Bullet,
 );
+const WARM_PICKUPS = [{ x: 0, y: 0, px: 0, py: 0, vx: 0, vy: 0, age: 1, spin: 0 }];
 const WARM_VIEW = { alpha: 1, fogRadius: 0, playerX: 0, playerY: 0, z: 0.5 };
 
 /** Minimal stand-in so menus can reuse the same update paths. */
