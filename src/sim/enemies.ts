@@ -11,7 +11,7 @@ export interface EnemyArchetype {
   radius: number;
   /** HP at sector 1 before multipliers. */
   hp: number;
-  /** Éclats at sector 1 before multipliers. */
+  /** Shards at sector 1 before multipliers. */
   value: number;
   heavy: boolean;
   hue: Hue;
@@ -26,7 +26,7 @@ const canFire = (e: Enemy): boolean =>
 
 const dart: EnemyArchetype = {
   kind: 'dart',
-  name: 'Fléchette',
+  name: 'Dart',
   radius: 2.6,
   hp: 2.5,
   value: 10,
@@ -47,7 +47,7 @@ const dart: EnemyArchetype = {
 
 const weaver: EnemyArchetype = {
   kind: 'weaver',
-  name: 'Tisseur',
+  name: 'Weaver',
   radius: 3.2,
   hp: 6,
   value: 16,
@@ -117,7 +117,7 @@ const turret: EnemyArchetype = {
 
 const diver: EnemyArchetype = {
   kind: 'diver',
-  name: 'Plongeur',
+  name: 'Diver',
   radius: 2.6,
   hp: 3.5,
   value: 12,
@@ -183,7 +183,7 @@ const orbiter: EnemyArchetype = {
 
 const carrier: EnemyArchetype = {
   kind: 'carrier',
-  name: 'Porteur',
+  name: 'Carrier',
   radius: 7.5,
   hp: 70,
   value: 90,
@@ -251,7 +251,7 @@ export function onEnemyDeath(e: Enemy, w: World): void {
 
 const boss: EnemyArchetype = {
   kind: 'boss',
-  name: 'Léviathan',
+  name: 'Leviathan',
   radius: 11,
   hp: 300,
   value: 400,

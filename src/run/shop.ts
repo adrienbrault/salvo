@@ -136,7 +136,7 @@ export function buy(run: RunState, area: 'offers' | 'workshop', index: number): 
       } else if (def.id === 'repair') run.hp = Math.min(computeStats(run).maxHp, run.hp + 1);
       break;
   }
-  // Max HP may have changed (e.g. Cœur de verre): keep HP within bounds.
+  // Max HP may have changed (e.g. Glass Heart): keep HP within bounds.
   run.hp = Math.min(run.hp, computeStats(run).maxHp);
   return result;
 }

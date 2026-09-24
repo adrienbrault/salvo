@@ -7,11 +7,11 @@
 export type KillType = 'tir' | 'impact' | 'renvoi' | 'onde' | 'reaction';
 export const KILL_TYPES: readonly KillType[] = ['tir', 'impact', 'renvoi', 'onde', 'reaction'];
 export const KILL_TYPE_LABEL: Record<KillType, string> = {
-  tir: 'Tir',
+  tir: 'Shot',
   impact: 'Impact',
-  renvoi: 'Renvoi',
-  onde: 'Onde',
-  reaction: 'Réaction',
+  renvoi: 'Reflect',
+  onde: 'Wave',
+  reaction: 'Reaction',
 };
 
 export type EnemyKind = 'dart' | 'weaver' | 'turret' | 'diver' | 'orbiter' | 'carrier' | 'mine' | 'boss';
@@ -51,7 +51,7 @@ export interface Bullet {
   killType: KillType;
   grazed: boolean;
   lastHitId: number;
-  /** Set when the player's Miroir reflected it, or boss mirror constraint — for visuals. */
+  /** Set when the player's Mirror reflected it, or boss mirror constraint — for visuals. */
   reflected: boolean;
 }
 
@@ -67,7 +67,7 @@ export interface Enemy {
   radius: number;
   hp: number;
   maxHp: number;
-  /** Éclats awarded on kill (Balatro "chips"). */
+  /** Shards awarded on kill (Balatro "chips"). */
   value: number;
   heavy: boolean;
   boss: boolean;
@@ -121,12 +121,12 @@ export interface Player {
   /** Action cooldown remaining / max (Blaster salvo). */
   cooldown: number;
   cooldownMax: number;
-  /** 0..1 gauge: graze charge (Frôleur) or shield energy (Miroir). */
+  /** 0..1 gauge: graze charge (Grazer) or shield energy (Mirror). */
   charge: number;
-  /** Bullets absorbed by the Miroir shield, waiting to be released. */
+  /** Bullets absorbed by the Mirror shield, waiting to be released. */
   stored: number;
   shield: boolean;
-  /** Dash (Bélier). */
+  /** Dash (Ram). */
   dashT: number;
   dashDx: number;
   dashDy: number;
@@ -134,7 +134,7 @@ export interface Player {
   charges: number;
   maxCharges: number;
   chargeT: number;
-  /** Weapon disabled (constraint "Silence radio"). */
+  /** Weapon disabled (constraint "Radio Silence"). */
   disabled: boolean;
 }
 
@@ -177,7 +177,7 @@ export interface PlayerStats {
   pierce: number;
   bounces: number;
   gaugeGainMul: number;
-  /** Enemies explode on death (Réaction kills). */
+  /** Enemies explode on death (Reaction kills). */
   chainExplosions: boolean;
 }
 

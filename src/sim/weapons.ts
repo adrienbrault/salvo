@@ -18,7 +18,7 @@ export interface WeaponImpl {
 
 const UP = Math.PI / 2;
 
-// ── Blaster (Faucon): auto-fire + Salve ──────────────────────────────────────
+// ── Blaster (Falcon): auto-fire + Salvo ──────────────────────────────────────
 export const BLASTER = {
   interval: 0.085,
   speed: 250,
@@ -73,7 +73,7 @@ const blaster: WeaponImpl = {
   },
 };
 
-// ── Frôleur (Luciole): grazes charge an Onde + spawn homing sparks ──────────
+// ── Grazer (Firefly): grazes charge a Wave + spawn homing sparks ─────────────
 export const GRAZER = {
   passiveCharge: 0.025,
   grazeCharge: 0.06,
@@ -131,7 +131,7 @@ const grazer: WeaponImpl = {
   },
 };
 
-// ── Miroir (Prisme): hold to shield & absorb, release to send everything back ─
+// ── Mirror (Prism): hold to shield & absorb, release to send everything back ─
 export const MIRROR = {
   shieldRadius: 7.5,
   drain: 0.38,
@@ -203,7 +203,7 @@ export function mirrorAbsorb(w: World): void {
   w.fx.push({ t: 'absorb', x: p.x, y: p.y });
 }
 
-// ── Bélier (Taureau): dash through everything ────────────────────────────────
+// ── Ram (Bull): dash through everything ──────────────────────────────────────
 export const RAM = {
   duration: 0.19,
   speed: 330,

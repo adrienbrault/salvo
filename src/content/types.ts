@@ -32,7 +32,7 @@ export interface GrazeInfo {
 
 /**
  * Context handed to item hooks. `inst.state` is where scaling items keep counters.
- * A copied effect (Plan / Blueprint) receives the *copier's* instance, so counters are never shared.
+ * A copied effect (Blueprint) receives the *copier's* instance, so counters are never shared.
  */
 export interface HookCtx {
   readonly world: World;
@@ -77,8 +77,8 @@ export interface ItemDef extends ItemHooks {
   rarity: Rarity;
   price: number;
   /**
-   * Rich description. Markup: {m:+3 Mult} red, {b:+20 Éclats} blue, {x:×2 Mult} red chip,
-   * {$:$1} gold, {k:Impact} keyword, {g:0,15} gauge (red, italic).
+   * Rich description. Markup: {m:+3 Mult} red, {b:+20 Shards} blue, {x:×2 Mult} red chip,
+   * {$:$1} gold, {k:Impact} keyword, {g:+0.15} gauge (red, italic).
    */
   desc: string | ((inst: ItemInstance | undefined) => string);
   flavor?: string;
@@ -89,22 +89,22 @@ export interface ItemDef extends ItemHooks {
   killType?: KillType;
   modifyStats?(stats: PlayerStats, inst: ItemInstance): void;
   modifyEconomy?(eco: EconomyStats, inst: ItemInstance): void;
-  /** Cannot be copied by Plan (e.g. Plan itself). */
+  /** Cannot be copied by Blueprint (e.g. Blueprint itself). */
   noCopy?: boolean;
 }
 
 export const RARITY_LABEL: Record<Rarity, string> = {
-  common: 'Commun',
+  common: 'Common',
   rare: 'Rare',
-  legendary: 'Légendaire',
+  legendary: 'Legendary',
 };
 
 export const KIND_LABEL: Record<ItemKind, string> = {
-  weapon: 'Arme',
-  engine: 'Moteur',
-  core: 'Cœur',
-  relic: 'Relique',
-  calibration: 'Calibrage',
+  weapon: 'Weapon',
+  engine: 'Engine',
+  core: 'Core',
+  relic: 'Relic',
+  calibration: 'Calibration',
   module: 'Module',
 };
 

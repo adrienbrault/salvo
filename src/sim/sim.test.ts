@@ -101,7 +101,7 @@ describe('Scoring & relics', () => {
     return { total: w.score - before, calc: { base: ev.base, mult: ev.mult, repeats: ev.repeats } };
   }
 
-  test('base formula is éclats × gauge', () => {
+  test('base formula is shards × gauge', () => {
     expect(scoreOneKill([]).total).toBe(10);
   });
 
@@ -112,18 +112,18 @@ describe('Scoring & relics', () => {
     expect(timesThenPlus).toBe(55);
   });
 
-  test('Plan copies the relic to its right', () => {
+  test('Blueprint copies the relic to its right', () => {
     expect(scoreOneKill(['blueprint', 'mult_flat']).total).toBe(70); // 1+3+3
     expect(scoreOneKill(['mult_flat', 'blueprint']).total).toBe(40); // nothing to copy
   });
 
-  test('Cœur de verre sets max HP to 1', () => {
+  test('Glass Heart sets max HP to 1', () => {
     const run = freshRun('prisme');
     run.loadout.relics.push(newInstance(run, 'glass', 9));
     expect(computeStats(run).maxHp).toBe(1);
   });
 
-  test('Dague rituelle eats its right neighbour at level start', () => {
+  test('Ritual Dagger eats its right neighbour at level start', () => {
     const run = freshRun('faucon');
     run.loadout.relics.push(newInstance(run, 'dagger', 7), newInstance(run, 'mult_flat', 4));
     new World(run, currentSpec(run), levelRng(run));

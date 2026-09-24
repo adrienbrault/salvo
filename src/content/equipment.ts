@@ -12,47 +12,47 @@ export const WEAPON_ITEMS: ItemDef[] = [
     rarity: 'common',
     price: 7,
     tags: ['shots'],
-    desc: 'Tir automatique continu. {k:Action} : Salve de 13 projectiles en éventail (recharge 2,2 s). Kills : {k:Tir}.',
-    flavor: 'Fiable. Bruyant. Efficace.',
+    desc: 'Continuous auto-fire. {k:Action}: a 13-shot fanning Salvo (2.2 s recharge). Kills: {k:Shot}.',
+    flavor: 'Reliable. Loud. Effective.',
   },
   {
     id: 'w_grazer',
     kind: 'weapon',
     weapon: 'grazer',
-    name: 'Frôleur',
+    name: 'Grazer',
     glyph: '≋',
     color: '#ffd166',
     rarity: 'common',
     price: 7,
     tags: ['graze'],
-    desc: 'Aucun tir. Chaque {k:frôlement} charge l’Onde et lâche une étincelle chercheuse. {k:Action} : libère l’{k:Onde}, qui annule les balles. Kills : {k:Onde}.',
-    flavor: 'Plus tu t’approches, plus tu frappes fort.',
+    desc: 'No shots. Each {k:graze} charges the Wave and sheds a homing spark. {k:Action}: unleash the {k:Wave}, which cancels bullets. Kills: {k:Wave}.',
+    flavor: 'The closer you get, the harder you hit.',
   },
   {
     id: 'w_mirror',
     kind: 'weapon',
     weapon: 'mirror',
-    name: 'Miroir',
+    name: 'Mirror',
     glyph: '◈',
     color: '#e8e8ff',
     rarity: 'common',
     price: 7,
     tags: ['reflect'],
-    desc: 'Aucun tir. {k:Maintiens l’action} : bouclier qui absorbe les balles (te ralentit). {k:Relâche} : renvoie tout. Kills : {k:Renvoi}.',
-    flavor: 'Leurs balles. Ton problème ? Non : le leur.',
+    desc: 'No shots. {k:Hold action}: a shield that absorbs bullets (slows you down). {k:Release}: send it all back. Kills: {k:Reflect}.',
+    flavor: 'Their bullets. Your problem? Nope: theirs.',
   },
   {
     id: 'w_ram',
     kind: 'weapon',
     weapon: 'ram',
-    name: 'Bélier',
+    name: 'Ram',
     glyph: '⟫',
     color: '#ff5d73',
     rarity: 'common',
     price: 7,
     tags: ['impact'],
-    desc: 'Aucun tir. {k:Action} : ruée invulnérable qui pulvérise balles et ennemis (2 charges). Kills : {k:Impact}.',
-    flavor: 'La meilleure défense, c’est la vitesse.',
+    desc: 'No shots. {k:Action}: an invulnerable dash that shreds bullets and enemies (2 charges). Kills: {k:Impact}.',
+    flavor: 'The best defense is speed.',
   },
 ];
 
@@ -60,23 +60,23 @@ export const ENGINE_ITEMS: ItemDef[] = [
   {
     id: 'e_std',
     kind: 'engine',
-    name: 'Propulseur',
+    name: 'Thruster',
     glyph: '⊙',
     color: '#9ad1ff',
     rarity: 'common',
     price: 5,
-    desc: 'Vitesse, hitbox et frôlement standards.',
+    desc: 'Standard speed, hitbox and graze.',
   },
   {
     id: 'e_micro',
     kind: 'engine',
-    name: 'Micro-réacteur',
+    name: 'Micro-reactor',
     glyph: '∘',
     color: '#b8f2a0',
     rarity: 'common',
     price: 5,
     tags: ['graze'],
-    desc: 'Hitbox {k:−30%}, rayon de frôlement {k:+30%}, vitesse {k:−12%}.',
+    desc: 'Hitbox {k:−30%}, graze radius {k:+30%}, speed {k:−12%}.',
     modifyStats(s) {
       s.hitRadius *= 0.7;
       s.grazeRadius *= 1.3;
@@ -86,13 +86,13 @@ export const ENGINE_ITEMS: ItemDef[] = [
   {
     id: 'e_turbo',
     kind: 'engine',
-    name: 'Postcombustion',
+    name: 'Afterburner',
     glyph: '⋙',
     color: '#ff9f43',
     rarity: 'common',
     price: 5,
     tags: ['impact'],
-    desc: 'Vitesse {k:+30%}, hitbox {k:+20%}, rayon de frôlement {k:−15%}.',
+    desc: 'Speed {k:+30%}, hitbox {k:+20%}, graze radius {k:−15%}.',
     modifyStats(s) {
       s.speed *= 1.3;
       s.hitRadius *= 1.2;
@@ -105,23 +105,23 @@ export const CORE_ITEMS: ItemDef[] = [
   {
     id: 'c_stable',
     kind: 'core',
-    name: 'Cœur stable',
+    name: 'Stable Core',
     glyph: '◆',
     color: '#7cf29a',
     rarity: 'common',
     price: 6,
-    desc: '{k:3 PV} max.',
+    desc: '{k:3 HP} max.',
   },
   {
     id: 'c_armored',
     kind: 'core',
-    name: 'Cœur blindé',
+    name: 'Armored Core',
     glyph: '⬟',
     color: '#a0a8c0',
     rarity: 'common',
     price: 6,
     tags: ['defense'],
-    desc: '{k:5 PV} max. Récompense de niveau {$:−$1}.',
+    desc: '{k:5 HP} max. Level reward {$:−$1}.',
     modifyStats(s) {
       s.maxHp += 2;
     },
@@ -132,13 +132,13 @@ export const CORE_ITEMS: ItemDef[] = [
   {
     id: 'c_unstable',
     kind: 'core',
-    name: 'Cœur instable',
+    name: 'Unstable Core',
     glyph: '✶',
     color: '#ff4f9a',
     rarity: 'common',
     price: 6,
     tags: ['risk'],
-    desc: '{k:2 PV} max. Tous les gains de jauge {m:Mult} {x:×2}.',
+    desc: '{k:2 HP} max. All {m:Mult} gauge gains {x:×2}.',
     modifyStats(s) {
       s.maxHp -= 1;
       s.gaugeGainMul *= 2;
@@ -147,13 +147,13 @@ export const CORE_ITEMS: ItemDef[] = [
   {
     id: 'c_merchant',
     kind: 'core',
-    name: 'Cœur marchand',
+    name: 'Merchant Core',
     glyph: '¤',
     color: '#ffd23f',
     rarity: 'common',
     price: 6,
     tags: ['economy'],
-    desc: '{k:3 PV} max. Plafond d’intérêts {$:+$3}, relances {$:−$1}.',
+    desc: '{k:3 HP} max. Interest cap {$:+$3}, rerolls {$:−$1}.',
     modifyEconomy(e) {
       e.interestCap += 3;
       e.rerollBase -= 1;

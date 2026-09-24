@@ -162,7 +162,7 @@ export class EnemyLayer {
   }
 }
 
-/** Léviathan: a layered war-machine with counter-rotating rings and a pulsing core. */
+/** Leviathan: a layered war-machine with counter-rotating rings and a pulsing core. */
 export class BossView {
   readonly group = new Group();
   private readonly flash = uniform(0);

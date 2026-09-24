@@ -26,8 +26,8 @@ export const RELICS = RELIC_ITEMS;
 export const EQUIPMENT: readonly ItemDef[] = [...WEAPON_ITEMS, ...ENGINE_ITEMS, ...CORE_ITEMS];
 
 /**
- * The def whose effects apply for relic `slot`. Plan (blueprint) copies the next relic to its
- * right, following chains of Plans. Returns null when nothing valid can be copied.
+ * The def whose effects apply for relic `slot`. Blueprint copies the next relic to its
+ * right, following chains of Blueprints. Returns null when nothing valid can be copied.
  */
 export function resolveRelicDef(relics: readonly ItemInstance[], slot: number): ItemDef | null {
   let j = slot;

@@ -38,7 +38,7 @@ const GHOSTS = 5;
 /**
  * The player's fighter: glossy clear-coated hull, HDR trims, procedural engine plumes,
  * a hitbox core that is always readable, plus weapon-specific visuals
- * (Miroir shield, Frôleur charge halo, Bélier dash ghosts).
+ * (Mirror shield, Grazer charge halo, Ram dash ghosts).
  */
 export class PlayerShip {
   readonly group = new Group();
@@ -135,7 +135,7 @@ export class PlayerShip {
     this.shield = new Mesh(new SphereGeometry(MIRROR.shieldRadius, 40, 24), shieldMat);
     this.shield.visible = false;
 
-    // Frôleur charge halo (also shows the graze radius faintly for everyone).
+    // Grazer charge halo (also shows the graze radius faintly for everyone).
     const haloMat = new MeshBasicNodeMaterial();
     haloMat.transparent = true;
     haloMat.depthWrite = false;
@@ -147,7 +147,7 @@ export class PlayerShip {
     this.halo = new Mesh(new RingGeometry(0.85, 1, 64, 1), haloMat);
     this.halo.position.z = -0.4;
 
-    // Dash ghosts (Bélier).
+    // Dash ghosts (Ram).
     const ghostMat = new MeshBasicNodeMaterial();
     ghostMat.transparent = true;
     ghostMat.depthWrite = false;
@@ -198,7 +198,7 @@ export class PlayerShip {
     this.shieldPulse.value = Math.max(0, this.shieldPulse.value - dt * 4);
     this.shield.rotation.z = t * 0.6;
 
-    // Halo = graze radius, brightened by Frôleur charge.
+    // Halo = graze radius, brightened by Grazer charge.
     const graze = world.stats.grazeRadius;
     this.halo.scale.setScalar(graze);
     this.chargeU.value = world.weapon.id === 'grazer' ? p.charge : 0;

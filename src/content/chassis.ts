@@ -14,8 +14,8 @@ export interface ChassisDef {
 export const CHASSIS: ChassisDef[] = [
   {
     id: 'faucon',
-    name: 'Faucon',
-    tagline: 'Tir continu et Salve en éventail. Le classique, pour apprendre.',
+    name: 'Falcon',
+    tagline: 'Nonstop fire and a wide fanning Salvo. The classic, perfect for learning.',
     weapon: 'w_blaster',
     engine: 'e_std',
     core: 'c_stable',
@@ -24,8 +24,8 @@ export const CHASSIS: ChassisDef[] = [
   },
   {
     id: 'luciole',
-    name: 'Luciole',
-    tagline: 'Ne tire pas. Frôle les balles pour charger une Onde dévastatrice.',
+    name: 'Firefly',
+    tagline: 'Never fires. Graze bullets to charge a devastating Wave.',
     weapon: 'w_grazer',
     engine: 'e_micro',
     core: 'c_stable',
@@ -34,8 +34,8 @@ export const CHASSIS: ChassisDef[] = [
   },
   {
     id: 'prisme',
-    name: 'Prisme',
-    tagline: 'Absorbe les balles avec ton bouclier, puis renvoie tout.',
+    name: 'Prism',
+    tagline: 'Soak up bullets with your shield, then send it all back.',
     weapon: 'w_mirror',
     engine: 'e_std',
     core: 'c_armored',
@@ -44,8 +44,8 @@ export const CHASSIS: ChassisDef[] = [
   },
   {
     id: 'taureau',
-    name: 'Taureau',
-    tagline: 'Fonce dans le tas. Tes ruées pulvérisent tout sur leur passage.',
+    name: 'Bull',
+    tagline: 'Charge right in. Your dashes shred everything in their path.',
     weapon: 'w_ram',
     engine: 'e_turbo',
     core: 'c_armored',

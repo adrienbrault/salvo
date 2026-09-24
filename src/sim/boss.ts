@@ -5,7 +5,7 @@ import type { World } from './world';
 const HOLD_Y = 50;
 
 /**
- * Léviathan — three phases keyed on HP (100–66–33 %). Each phase change cancels
+ * Leviathan — three phases keyed on HP (100–66–33 %). Each phase change cancels
  * all enemy bullets (breathing room + a satisfying flash).
  *
  * Fields: state 0 = entering / 1 = fighting; b = current phase; d = spiral angle;

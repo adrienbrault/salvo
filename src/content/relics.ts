@@ -5,7 +5,7 @@ const st = (inst: { state: Record<string, number> } | undefined, key: string): n
   inst?.state[key] ?? 0;
 
 /**
- * Relics = Balatro jokers. They plug into the score formula (Éclats × Mult) or bend a rule.
+ * Relics = Balatro jokers. They plug into the score formula (Shards × Mult) or bend a rule.
  * Families: flat, conditional, scaling, ×Mult, economy, rule-changer, copy, sacrifice.
  */
 export const RELIC_ITEMS: ItemDef[] = [
@@ -13,12 +13,12 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'mult_flat',
     kind: 'relic',
-    name: 'Canon à Mult',
+    name: 'Mult Cannon',
     glyph: '✚',
     color: '#ff4d6d',
     rarity: 'common',
     price: 4,
-    desc: '{m:+3 Mult} sur chaque kill.',
+    desc: '{m:+3 Mult} on every kill.',
     onKill(c, _k, s) {
       s.mult += 3;
       c.trigger();
@@ -27,12 +27,12 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'base_flat',
     kind: 'relic',
-    name: 'Collecteur',
+    name: 'Collector',
     glyph: '◇',
     color: '#4dabff',
     rarity: 'common',
     price: 4,
-    desc: '{b:+20 Éclats} sur chaque kill.',
+    desc: '{b:+20 Shards} on every kill.',
     onKill(c, _k, s) {
       s.base += 20;
       c.trigger();
@@ -42,13 +42,13 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'point_blank',
     kind: 'relic',
-    name: 'Tête brûlée',
+    name: 'Hothead',
     glyph: '☄',
     color: '#ff7b39',
     rarity: 'common',
     price: 5,
     tags: ['impact', 'risk'],
-    desc: `Kill à moins de ${POINT_BLANK} m : {m:+8 Mult}.`,
+    desc: `Kills within ${POINT_BLANK} m: {m:+8 Mult}.`,
     onKill(c, k, s) {
       if (k.dist < POINT_BLANK) {
         s.mult += 8;
@@ -59,13 +59,13 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'sniper',
     kind: 'relic',
-    name: 'Longue-vue',
+    name: 'Spyglass',
     glyph: '⌖',
     color: '#5ad1ff',
     rarity: 'common',
     price: 5,
     tags: ['shots'],
-    desc: `Kill à plus de ${LONG_RANGE} m : {b:+60 Éclats}.`,
+    desc: `Kills beyond ${LONG_RANGE} m: {b:+60 Shards}.`,
     onKill(c, k, s) {
       if (k.dist > LONG_RANGE) {
         s.base += 60;
@@ -76,12 +76,12 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'big_game',
     kind: 'relic',
-    name: 'Chasseur de gros',
+    name: 'Big Game Hunter',
     glyph: '♜',
     color: '#ffb000',
     rarity: 'rare',
     price: 6,
-    desc: 'Kills d’ennemis {k:lourds} et de {k:boss} : {x:×3 Mult}.',
+    desc: '{k:Heavy} enemy and {k:boss} kills: {x:×3 Mult}.',
     onKill(c, k, s) {
       if (k.enemy.heavy) {
         s.mult *= 3;
@@ -92,13 +92,13 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'anchor',
     kind: 'relic',
-    name: 'Ancrage',
+    name: 'Anchor',
     glyph: '⚓',
     color: '#7aa2ff',
     rarity: 'rare',
     price: 6,
     tags: ['shots'],
-    desc: 'Immobile depuis 0,5 s : {x:×2 Mult} par kill.',
+    desc: 'Still for 0.5 s: {x:×2 Mult} per kill.',
     onKill(c, _k, s) {
       if (c.world.player.still >= 0.5) {
         s.mult *= 2;
@@ -109,13 +109,13 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'last_breath',
     kind: 'relic',
-    name: 'Dernier souffle',
+    name: 'Last Breath',
     glyph: '☽',
     color: '#c77dff',
     rarity: 'rare',
     price: 6,
     tags: ['risk'],
-    desc: 'Quand il te reste {k:1 PV} : {x:×3 Mult}.',
+    desc: 'While at {k:1 HP}: {x:×3 Mult}.',
     onKill(c, _k, s) {
       if (c.world.player.hp === 1) {
         s.mult *= 3;
@@ -127,13 +127,13 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'graze_gauge',
     kind: 'relic',
-    name: 'Frisson',
+    name: 'Thrill',
     glyph: '≈',
     color: '#ffd166',
     rarity: 'common',
     price: 5,
     tags: ['graze'],
-    desc: 'Chaque {k:frôlement} : {g:+0,15} à la jauge Mult.',
+    desc: 'Each {k:graze}: {g:+0.15} to the Mult gauge.',
     onGraze(c) {
       c.addGauge(0.15);
       c.trigger();
@@ -142,13 +142,13 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'adrenaline',
     kind: 'relic',
-    name: 'Adrénaline',
+    name: 'Adrenaline',
     glyph: '⚡︎',
     color: '#ffe14d',
     rarity: 'common',
     price: 5,
     tags: ['action'],
-    desc: 'Chaque utilisation de l’{k:action} : {g:+0,3} à la jauge Mult.',
+    desc: 'Each {k:action} use: {g:+0.3} to the Mult gauge.',
     onAction(c) {
       c.addGauge(0.3);
       c.trigger();
@@ -157,13 +157,13 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'untouched',
     kind: 'relic',
-    name: 'Invaincu',
+    name: 'Untouchable',
     glyph: '⛨',
     color: '#6cf0c2',
     rarity: 'rare',
     price: 6,
     tags: ['defense'],
-    desc: 'Toutes les 4 s sans être touché : {g:+0,5} à la jauge Mult.',
+    desc: 'Every 4 s without a hit: {g:+0.5} to the Mult gauge.',
     onLevelStart(c) {
       c.inst.state.t = 0;
     },
@@ -184,14 +184,14 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'veteran',
     kind: 'relic',
-    name: 'Vétéran',
+    name: 'Veteran',
     glyph: '✪',
     color: '#ff8fab',
     rarity: 'rare',
     price: 6,
     tags: ['defense'],
     desc: (inst) =>
-      `Gagne {m:+2 Mult} par kill à chaque niveau fini sans dégât. (actuel : {m:+${st(inst, 'bonus')} Mult})`,
+      `Gains {m:+2 Mult} per kill for each level cleared without damage. (now: {m:+${st(inst, 'bonus')} Mult})`,
     onKill(c, _k, s) {
       const b = st(c.inst, 'bonus');
       if (b > 0) {
@@ -210,13 +210,13 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'plunder',
     kind: 'relic',
-    name: 'Pilleur',
+    name: 'Plunderer',
     glyph: '⛃',
     color: '#ffd23f',
     rarity: 'common',
     price: 5,
     tags: ['economy'],
-    desc: '{$:+$1} tous les 12 kills.',
+    desc: '{$:+$1} every 12 kills.',
     onKill(c) {
       const n = st(c.inst, 'n') + 1;
       c.inst.state.n = n;
@@ -229,13 +229,13 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'saver',
     kind: 'relic',
-    name: 'Épargnant',
+    name: 'Nest Egg',
     glyph: '⊕',
     color: '#ffe066',
     rarity: 'rare',
     price: 6,
     tags: ['economy'],
-    desc: 'Plafond d’intérêts {$:+$5}.',
+    desc: 'Interest cap {$:+$5}.',
     modifyEconomy(e) {
       e.interestCap += 5;
     },
@@ -243,13 +243,13 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'speed_bonus',
     kind: 'relic',
-    name: 'Prime de vitesse',
+    name: 'Speed Bonus',
     glyph: '⏱︎',
     color: '#ffc14d',
     rarity: 'common',
     price: 4,
     tags: ['economy'],
-    desc: 'Finir un niveau avec au moins 15 s restantes : {$:+$3}.',
+    desc: 'Clear a level with 15 s or more left: {$:+$3}.',
     onLevelEnd(c, info) {
       if (info.won && info.timeLeft >= 15) {
         c.addMoney(3);
@@ -261,12 +261,12 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'firepower',
     kind: 'relic',
-    name: 'Surchauffe',
+    name: 'Overheat',
     glyph: '♨',
     color: '#ff6b35',
     rarity: 'common',
     price: 5,
-    desc: '{k:+30%} de dégâts.',
+    desc: '{k:+30%} damage.',
     modifyStats(s) {
       s.damageMul += 0.3;
     },
@@ -280,7 +280,7 @@ export const RELIC_ITEMS: ItemDef[] = [
     rarity: 'common',
     price: 4,
     tags: ['shots'],
-    desc: 'Tes projectiles {k:rebondissent} une fois sur les bords.',
+    desc: 'Your shots {k:bounce} off the side walls once.',
     modifyStats(s) {
       s.bounces += 1;
     },
@@ -288,13 +288,13 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'pierce',
     kind: 'relic',
-    name: 'Perce-blindage',
+    name: 'Armor Piercer',
     glyph: '⇶',
     color: '#74c0fc',
     rarity: 'common',
     price: 5,
     tags: ['shots'],
-    desc: 'Tes projectiles {k:traversent} un ennemi de plus.',
+    desc: 'Your shots {k:pierce} one more enemy.',
     modifyStats(s) {
       s.pierce += 1;
     },
@@ -302,13 +302,13 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'magnet',
     kind: 'relic',
-    name: 'Aimant',
+    name: 'Magnet',
     glyph: '⊂',
     color: '#ffa94d',
     rarity: 'common',
     price: 4,
     tags: ['graze'],
-    desc: 'Rayon de {k:frôlement} {k:+60%}.',
+    desc: '{k:Graze} radius {k:+60%}.',
     modifyStats(s) {
       s.grazeRadius *= 1.6;
     },
@@ -316,13 +316,13 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'cooldown',
     kind: 'relic',
-    name: 'Accélérateur',
+    name: 'Accelerator',
     glyph: '↻',
     color: '#69db7c',
     rarity: 'common',
     price: 4,
     tags: ['action'],
-    desc: 'Ton {k:action} se recharge {k:35%} plus vite.',
+    desc: 'Your {k:action} recharges {k:35%} faster.',
     modifyStats(s) {
       s.actionRecharge += 0.35;
     },
@@ -330,12 +330,12 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'chain',
     kind: 'relic',
-    name: 'Réaction en chaîne',
+    name: 'Chain Reaction',
     glyph: '✺',
     color: '#ff922b',
     rarity: 'rare',
     price: 7,
-    desc: 'Les ennemis détruits {k:explosent} et blessent leurs voisins (kills : {k:Réaction}).',
+    desc: 'Destroyed enemies {k:explode}, hurting their neighbors (kills: {k:Reaction}).',
     modifyStats(s) {
       s.chainExplosions = true;
     },
@@ -343,12 +343,12 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'echo',
     kind: 'relic',
-    name: 'Écho',
+    name: 'Echo',
     glyph: '⧉',
     color: '#9775fa',
     rarity: 'rare',
     price: 6,
-    desc: '1 chance sur 4 qu’un kill rapporte {x:2 fois} son score.',
+    desc: '1 in 4 chance for a kill to score {x:twice}.',
     onKill(c, _k, s) {
       if (c.world.rng.next() < 0.25) {
         s.repeats *= 2;
@@ -365,26 +365,26 @@ export const RELIC_ITEMS: ItemDef[] = [
     rarity: 'rare',
     price: 6,
     tags: ['defense'],
-    desc: 'Tous les 50 kills : {k:+1 PV}.',
+    desc: 'Every 50 kills: {k:+1 HP}.',
     onKill(c) {
       const n = st(c.inst, 'n') + 1;
       c.inst.state.n = n;
       if (n % 50 === 0) {
         c.world.heal(1);
-        c.trigger('+1 PV');
+        c.trigger('+1 HP');
       }
     },
   },
   {
     id: 'bullet_time',
     kind: 'relic',
-    name: 'Chronostase',
+    name: 'Chronostasis',
     glyph: '⧗',
     color: '#66d9e8',
     rarity: 'rare',
     price: 7,
     tags: ['graze'],
-    desc: 'Un {k:frôlement de près} ralentit les ennemis et leurs balles pendant 0,7 s.',
+    desc: 'A {k:close graze} slows enemies and their bullets for 0.7 s.',
     onGraze(c, g) {
       if (g.close) {
         c.world.slowT = 0.7;
@@ -395,13 +395,13 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'momentum',
     kind: 'relic',
-    name: 'Élan',
+    name: 'Momentum',
     glyph: '➹',
     color: '#ff6b6b',
     rarity: 'rare',
     price: 6,
     tags: ['impact'],
-    desc: 'Un kill pendant une {k:ruée} rend une charge. Kills {k:Impact} : {m:+4 Mult}.',
+    desc: 'A kill mid-{k:dash} refunds a charge. {k:Impact} kills: {m:+4 Mult}.',
     onKill(c, k, s) {
       const p = c.world.player;
       let fired = false;
@@ -420,18 +420,18 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'blueprint',
     kind: 'relic',
-    name: 'Plan',
+    name: 'Blueprint',
     glyph: '⎘',
     color: '#4dabf7',
     rarity: 'legendary',
     price: 10,
     noCopy: true,
-    desc: 'Copie l’effet de la relique {k:à sa droite} (avec son propre compteur).',
+    desc: 'Copies the effect of the relic {k:to its right} (with its own counters).',
   },
   {
     id: 'dagger',
     kind: 'relic',
-    name: 'Dague rituelle',
+    name: 'Ritual Dagger',
     glyph: '†',
     color: '#fa5252',
     rarity: 'rare',
@@ -439,7 +439,7 @@ export const RELIC_ITEMS: ItemDef[] = [
     noCopy: true,
     tags: ['risk'],
     desc: (inst) =>
-      `Début de niveau : détruit la relique {k:à sa droite} et gagne 2× sa valeur de revente en {m:Mult} par kill. (actuel : {m:+${st(inst, 'bonus')} Mult})`,
+      `Level start: destroys the relic {k:to its right} and gains 2× its sell value as {m:Mult} per kill. (now: {m:+${st(inst, 'bonus')} Mult})`,
     onLevelStart(c) {
       const relics = c.world.run.loadout.relics;
       const idx = relics.indexOf(c.inst);
@@ -461,13 +461,13 @@ export const RELIC_ITEMS: ItemDef[] = [
   {
     id: 'glass',
     kind: 'relic',
-    name: 'Cœur de verre',
+    name: 'Glass Heart',
     glyph: '◊',
     color: '#a5d8ff',
     rarity: 'legendary',
     price: 9,
     tags: ['risk'],
-    desc: '{x:×2,5 Mult} sur chaque kill. Tes PV max passent à {k:1}.',
+    desc: '{x:×2.5 Mult} on every kill. Your max HP drops to {k:1}.',
     modifyStats(s) {
       s.maxHp = 1;
     },
@@ -484,7 +484,7 @@ export const RELIC_ITEMS: ItemDef[] = [
     color: '#ffec99',
     rarity: 'legendary',
     price: 10,
-    desc: 'Chaque {k:25e kill} du niveau : {x:×5 Mult} et une onde de choc gratuite.',
+    desc: 'Every {k:25th kill} of the level: {x:×5 Mult} and a free shockwave.',
     onKill(c, k, s) {
       if (k.killIndex % 25 === 0) {
         s.mult *= 5;

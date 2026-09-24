@@ -26,7 +26,7 @@ export const PLAYER_BOUNDS = {
 
 export const PLAYER_SPAWN = { x: 0, y: -FIELD.halfH + 26 } as const;
 
-/** Seconds of "PRÊT" before spawns and timer start. */
+/** Seconds of "READY" before spawns and timer start. */
 export const LEVEL_INTRO = 1.6;
 /** Seconds of victory outro (screen clear) before the level ends. */
 export const LEVEL_OUTRO = 1.8;
