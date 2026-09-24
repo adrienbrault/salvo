@@ -11,6 +11,7 @@ import { Counter } from '../components/Counter';
 import { type HoverBind, HoverDetail, useHover } from '../components/HoverDetail';
 import { ItemCard, SoldCard } from '../components/ItemCard';
 import { copyNote, ItemDetail } from '../components/ItemDetail';
+import { KillTypeFitLine } from '../components/KillTypeFit';
 import { HpPips } from '../components/Pips';
 import { Rich } from '../components/Rich';
 import { fmt, fmtMoney } from '../format';
@@ -44,7 +45,17 @@ function homeKey(def: ItemDef, run: RunState): string {
   return `upgrade-${def.id}`;
 }
 
-const rich = (text: string | null) => text && <Rich text={text} />;
+/** A workshop item's note: where it stands in this run, and for a calibration whether it pays off. */
+function workshopNote(run: RunState, def: ItemDef): ComponentChildren {
+  const text = upgradeNote(run, def);
+  if (!text && !def.killType) return null;
+  return (
+    <>
+      {text && <Rich text={text} />}
+      {def.killType && <KillTypeFitLine run={run} kt={def.killType} />}
+    </>
+  );
+}
 
 /** What the detail panel and the hover detail both show for a target. */
 interface Detail {
@@ -106,14 +117,14 @@ export function Shop() {
     }
     if (t.area === 'upgrade') {
       const def = getItem(t.id);
-      return { def, note: rich(upgradeNote(run, def)), foot: null };
+      return { def, note: workshopNote(run, def), foot: null };
     }
     if (t.area === 'offers' || t.area === 'workshop') {
       const o = shop[t.area][t.index];
       if (!o?.id) return null;
       const def = getItem(o.id);
       const err = canBuy(run, o);
-      let note: ComponentChildren = rich(upgradeNote(run, def));
+      let note = workshopNote(run, def);
       if (def.kind === 'weapon' || def.kind === 'engine' || def.kind === 'core') {
         const old = run.loadout[def.kind];
         note = `Replaces ${getItem(old.id).name} (sold back for $${sellValue(old)}).`;

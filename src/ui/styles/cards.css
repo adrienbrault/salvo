@@ -222,6 +222,22 @@
   font: 600 14px / 1.35 var(--font-ui);
   color: #a8eeff;
 }
+/* Does the ship make this kill type? (calibrations) */
+.fit {
+  display: block;
+  margin-top: 4px;
+}
+.fit-ok {
+  color: var(--green);
+}
+.fit-off {
+  font-weight: 400;
+  color: var(--muted);
+}
+.fit-off::before {
+  content: "⚠ ";
+  color: #ffb45e;
+}
 .detail-flavor {
   margin-top: 8px;
   font: 400 14px / 1.35 var(--font-ui);

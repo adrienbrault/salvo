@@ -10,7 +10,8 @@ export const OFFER_COUNT = 3;
 export const EQUIPMENT_CHANCE = 0.24;
 export const RARITY_WEIGHT: Record<Rarity, number> = { common: 70, rare: 25, legendary: 5 };
 
-const WEAPON_KILL_TYPE: Record<string, KillType> = {
+/** The kill type each weapon (`ItemDef.weapon`) scores. */
+export const WEAPON_KILL_TYPE: Record<string, KillType> = {
   blaster: 'tir',
   grazer: 'onde',
   mirror: 'renvoi',

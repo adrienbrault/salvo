@@ -3,7 +3,7 @@ import { getItem } from '../content/registry';
 import { createRun } from '../run/run';
 import { buy } from '../run/shop';
 import type { RunState } from '../run/state';
-import { ownedUpgrades, purchaseMessage, upgradeNote } from './upgrades';
+import { killTypeFit, ownedUpgrades, purchaseMessage, upgradeNote } from './upgrades';
 
 /** A Falcon run with money and a shop holding exactly `ids`. */
 function shopWith(ids: string[]): RunState {
@@ -32,8 +32,8 @@ describe('purchase feedback', () => {
       { id: 'w_ram', price: 7 },
     ];
     expect(buyAll(run)).toEqual([
-      'Impact calibrated to level 1',
-      'Impact calibrated to level 2',
+      'Impact calibrated to level 1, but your Blaster doesn’t make Impact kills: pays off with the Ram (Bull)',
+      'Impact calibrated to level 2, but your Blaster doesn’t make Impact kills: pays off with the Ram (Bull)',
       'Power Module installed: damage +20% in total',
       'Rate Module installed: rates +15% in total',
       'Hull Plating installed: max HP 4, hull 2/4',
@@ -57,15 +57,35 @@ describe('purchase feedback', () => {
     ]);
   });
 
-  test('a calibration note gives its level and whether the weapon scores that kill type', () => {
+  test('a calibration note gives its level', () => {
     const run = shopWith(['cal_impact']);
-    expect(upgradeNote(run, getItem('cal_impact'))).toBe(
-      '{k:Impact} level: 0. Your Blaster scores Shot kills, not Impact kills.',
-    );
+    expect(upgradeNote(run, getItem('cal_impact'))).toBe('{k:Impact} level: 0.');
     buyAll(run);
     expect(upgradeNote(run, getItem('cal_impact'))).toBe(
-      '{k:Impact} level 1: {b:+15 Shards} and {m:+1 Mult} on each Impact kill. Your Blaster scores Shot kills, not Impact kills.',
+      '{k:Impact} level 1: {b:+15 Shards} and {m:+1 Mult} on each Impact kill.',
     );
-    expect(upgradeNote(run, getItem('cal_tir'))).toBe('{k:Shot} level: 0. Your Blaster scores Shot kills.');
+  });
+
+  test('a calibration says whether the ship makes its kill type, and what would', () => {
+    const run = shopWith(['cal_tir', 'w_ram']);
+    expect(killTypeFit(run, 'tir')).toEqual({
+      fits: true,
+      source: 'Blaster',
+      text: 'Your Blaster makes Shot kills.',
+    });
+    expect(killTypeFit(run, 'impact').text).toBe(
+      'Your Blaster doesn’t make Impact kills: pays off with the Ram (Bull).',
+    );
+    expect(killTypeFit(run, 'onde').text).toBe(
+      'Your Blaster doesn’t make Wave kills: pays off with the Grazer (Firefly).',
+    );
+    expect(killTypeFit(run, 'reaction')).toEqual({
+      fits: false,
+      source: 'Blaster',
+      text: 'Your Blaster doesn’t make Reaction kills.',
+    });
+    expect(buyAll(run)[0]).toBe('Shot calibrated to level 1 for your Blaster');
+    run.loadout.relics.push({ uid: 99, id: 'chain', state: {}, paid: 7 });
+    expect(killTypeFit(run, 'reaction').text).toBe('Your Chain Reaction makes Reaction kills.');
   });
 });

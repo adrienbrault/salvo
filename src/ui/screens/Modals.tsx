@@ -5,6 +5,7 @@ import { CALIBRATION_BONUS, KILL_TYPE_SOURCE } from '../../content/upgrades';
 import { computeStats, MODULE_EFFECT } from '../../sim/stats';
 import { KILL_TYPE_LABEL, KILL_TYPES } from '../../sim/types';
 import { copyNote, ItemDetail } from '../components/ItemDetail';
+import { KillTypeFitLine } from '../components/KillTypeFit';
 import { fmt } from '../format';
 import { game } from '../game';
 import { type Modal, type Settings, ui } from '../store';
@@ -260,7 +261,9 @@ function Build() {
                     <span class="mk-b">+{n * CALIBRATION_BONUS.base} Shards</span>{' '}
                     <span class="mk-m">+{n * CALIBRATION_BONUS.mult} Mult</span>
                   </span>
-                  <small class="calib-src">{KILL_TYPE_SOURCE[kt]}</small>
+                  <small class="calib-src">
+                    {KILL_TYPE_SOURCE[kt]} <KillTypeFitLine run={run} kt={kt} />
+                  </small>
                 </li>
               );
             })}

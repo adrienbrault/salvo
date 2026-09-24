@@ -2,13 +2,15 @@
  * What a purchase did, and the upgrades it leaves behind: calibrations and modules change the
  * ship for good but take no slot, so the shop names them (toast, notes, chips).
  */
+import { CHASSIS } from '../content/chassis';
+import { WEAPON_ITEMS } from '../content/equipment';
 import { getItem } from '../content/registry';
 import type { ItemDef } from '../content/types';
 import { CALIBRATION_BONUS } from '../content/upgrades';
-import { type BuyResult, weaponKillType } from '../run/shop';
+import { type BuyResult, WEAPON_KILL_TYPE, weaponKillType } from '../run/shop';
 import type { RunState } from '../run/state';
 import { computeStats, MODULE_EFFECT } from '../sim/stats';
-import { KILL_TYPE_LABEL, KILL_TYPES } from '../sim/types';
+import { KILL_TYPE_LABEL, KILL_TYPES, type KillType } from '../sim/types';
 
 const pct = (v: number): number => Math.round(v * 100);
 const damagePct = (run: RunState): number => pct(run.modules.damage * MODULE_EFFECT.damage);
@@ -28,7 +30,12 @@ export function purchaseMessage(run: RunState, def: ItemDef, res: BuyResult): st
     }
     case 'calibration': {
       const kt = def.killType;
-      return kt ? `${KILL_TYPE_LABEL[kt]} calibrated to level ${run.calibrations[kt]}` : `${def.name} bought`;
+      if (!kt) return `${def.name} bought`;
+      const fit = killTypeFit(run, kt);
+      const done = `${KILL_TYPE_LABEL[kt]} calibrated to level ${run.calibrations[kt]}`;
+      return fit.fits
+        ? `${done} for your ${fit.source}`
+        : `${done}, but ${lower(fit.text).replace(/\.$/, '')}`;
     }
     case 'module':
       if (def.id === 'mod_damage') return `${def.name} installed: damage +${damagePct(run)}% in total`;
@@ -39,9 +46,38 @@ export function purchaseMessage(run: RunState, def: ItemDef, res: BuyResult): st
   }
 }
 
+const lower = (s: string): string => s.charAt(0).toLowerCase() + s.slice(1);
+
+export interface KillTypeFit {
+  /** The ship makes kills of this type right now. */
+  fits: boolean;
+  /** What makes them (the weapon, or Chain Reaction for Reaction kills). */
+  source: string;
+  text: string;
+}
+
 /**
- * Where a workshop item stands in this run, as description markup: the calibration's level and
- * whether the equipped weapon scores that kill type, a module's total, the hull. Null otherwise.
+ * Whether the ship as equipped makes kills of type `kt`, and if not, which weapon (and starting
+ * chassis) does: a calibration for a kill type the ship never makes buys nothing until it does.
+ */
+export function killTypeFit(run: RunState, kt: KillType): KillTypeFit {
+  const label = KILL_TYPE_LABEL[kt];
+  const weapon = getItem(run.loadout.weapon.id).name;
+  if (weaponKillType(run) === kt)
+    return { fits: true, source: weapon, text: `Your ${weapon} makes ${label} kills.` };
+  if (kt === 'reaction' && computeStats(run).chainExplosions) {
+    const chain = getItem('chain').name;
+    return { fits: true, source: chain, text: `Your ${chain} makes ${label} kills.` };
+  }
+  const maker = WEAPON_ITEMS.find((w) => w.weapon && WEAPON_KILL_TYPE[w.weapon] === kt);
+  const chassis = maker && CHASSIS.find((c) => c.weapon === maker.id);
+  const payoff = maker ? `: pays off with the ${maker.name}${chassis ? ` (${chassis.name})` : ''}` : '';
+  return { fits: false, source: weapon, text: `Your ${weapon} doesn’t make ${label} kills${payoff}.` };
+}
+
+/**
+ * Where a workshop item stands in this run, as description markup: a calibration's level (see
+ * killTypeFit for whether it pays off), a module's total, the hull. Null otherwise.
  */
 export function upgradeNote(run: RunState, def: ItemDef): string | null {
   const kt = def.killType;
@@ -52,13 +88,7 @@ export function upgradeNote(run: RunState, def: ItemDef): string | null {
       n === 0
         ? `{k:${label}} level: 0.`
         : `{k:${label}} level ${n}: {b:+${n * CALIBRATION_BONUS.base} Shards} and {m:+${n * CALIBRATION_BONUS.mult} Mult} on each ${label} kill.`;
-    const weapon = getItem(run.loadout.weapon.id).name;
-    const own = weaponKillType(run);
-    const match =
-      own === kt
-        ? `Your ${weapon} scores ${label} kills.`
-        : `Your ${weapon} scores ${KILL_TYPE_LABEL[own]} kills, not ${label} kills.`;
-    return `${level} ${match}`;
+    return level;
   }
   const m = run.modules;
   const hull = `Hull: ${run.hp}/${computeStats(run).maxHp} HP.`;

@@ -51,18 +51,21 @@ function ScreenView({ screen }: { screen: Screen }) {
   }
 }
 
+/** Long toasts (a purchase with a caveat) stay up long enough to read. */
+const toastMs = (text: string): number => Math.max(2200, text.length * 50);
+
 function Toast() {
   const t = ui.toast.value;
   const [shown, setShown] = useState<number | null>(null);
   useEffect(() => {
     if (!t) return;
     setShown(t.id);
-    const timer = setTimeout(() => setShown(null), 2200);
+    const timer = setTimeout(() => setShown(null), toastMs(t.text));
     return () => clearTimeout(timer);
   }, [t]);
   if (!t || shown !== t.id) return null;
   return (
-    <div class="toast" key={t.id} role="status">
+    <div class="toast" key={t.id} role="status" style={{ animationDuration: `${toastMs(t.text)}ms` }}>
       {t.text}
     </div>
   );
