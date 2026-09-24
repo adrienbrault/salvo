@@ -71,9 +71,7 @@ export class Post {
   private readonly shockNode;
   private readonly aspect = uniform(1);
   private readonly shocks: Shock[] = [];
-  private readonly scenePass;
   private readonly aoCamera: PerspectiveCamera | null = null;
-  private readonly prePass: ReturnType<typeof pass> | null = null;
 
   constructor(
     renderer: WebGPURenderer,
@@ -86,7 +84,6 @@ export class Post {
 
     const scenePass = pass(scene, camera);
     scenePass.setResolutionScale(o.resolutionScale);
-    this.scenePass = scenePass;
     if (o.ao) {
       // Normal/depth pre-pass of the hull only (a camera that sees just AO_LAYER), at half
       // resolution. The AO then only darkens indirect light: emissives, bullets and particles
@@ -96,7 +93,6 @@ export class Post {
       const prePass = pass(scene, aoCamera);
       prePass.setMRT(mrt({ output: normalView }));
       prePass.setResolutionScale(o.resolutionScale * 0.5);
-      this.prePass = prePass;
       const aoPass = ao(prePass.getTextureNode('depth'), prePass.getTextureNode(), aoCamera);
       aoPass.radius.value = 2.2;
       aoPass.thickness.value = 2;
@@ -151,11 +147,6 @@ export class Post {
 
     this.pipeline = new RenderPipeline(renderer, out);
     this.pipeline.outputColorTransform = false;
-  }
-
-  setResolutionScale(s: number): void {
-    this.scenePass.setResolutionScale(s);
-    this.prePass?.setResolutionScale(s * 0.5);
   }
 
   /** Screen-space refraction ring at screen uv (x, y ∈ 0..1). */

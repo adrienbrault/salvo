@@ -29,7 +29,7 @@ import { LightPool } from './fx/Lights';
 import { Particles } from './fx/Particles';
 import { Post } from './Post';
 import { hueColor } from './palette';
-import { autoTier, DynamicResolution, type Quality, TIERS, type Tier } from './quality';
+import { autoTier, DynamicResolution, pixelRatioFor, type Quality, TIERS, type Tier } from './quality';
 
 export interface RendererOptions {
   canvas: HTMLCanvasElement;
@@ -151,7 +151,7 @@ export class GameRenderer {
     scene.add(this.ship.group);
     this.ship.addGhostsTo(scene);
     this.ship.group.visible = false;
-    this.dynRes = new DynamicResolution(quality.resolutionScale, quality.minResolutionScale);
+    this.dynRes = new DynamicResolution(quality.minResolutionScale);
     this.fx = new FxDirector(
       this.rig,
       this.post,
@@ -181,7 +181,9 @@ export class GameRenderer {
       q.clustered = false;
       q.lights = Math.min(q.lights, 16);
     }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio));
+    renderer.setPixelRatio(
+      pixelRatioFor(q, window.innerWidth, window.innerHeight, window.devicePixelRatio || 1),
+    );
     // Stencils on the hull use the UI font: make sure it is loaded before painting.
     await document.fonts?.load('700 32px "Chakra Petch"').catch(() => undefined);
     const hull = await generateHullTextures(q.hullTexture, Math.min(8, renderer.getMaxAnisotropy()));
@@ -195,11 +197,22 @@ export class GameRenderer {
     this.height = height;
     this.insets = insets;
     this.renderer.setSize(width, height, false);
+    this.applyPixelRatio();
     this.rig.fit(width, height, insets);
     // Fog starts just beyond the play plane, whatever distance the camera had to back off to.
     const d = this.rig.camera.position.length();
     this.fogNear.value = d + 40;
     this.fogFar.value = d + 520;
+  }
+
+  private applyPixelRatio(): void {
+    const base = pixelRatioFor(this.quality, this.width, this.height, window.devicePixelRatio || 1);
+    this.renderer.setPixelRatio(base * this.dynRes.scale);
+  }
+
+  /** Dynamic resolution's current factor on the canvas pixel ratio (1 = the tier's full size). */
+  get resolutionScale(): number {
+    return this.dynRes.scale;
   }
 
   get size(): { w: number; h: number; insets: Insets } {
@@ -315,8 +328,7 @@ export class GameRenderer {
     this.lights.update(dt);
     this.post.update(dt, this.width, this.height);
 
-    const changed = this.dynRes.sample(frameMs);
-    if (changed !== null) this.post.setResolutionScale(changed);
+    if (this.dynRes.sample(frameMs) !== null) this.applyPixelRatio();
 
     this.post.render();
   }

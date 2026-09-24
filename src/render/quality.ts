@@ -4,8 +4,14 @@ export interface Quality {
   tier: Tier;
   /** Max device pixel ratio for the canvas. */
   pixelRatio: number;
-  /** Scene pass resolution scale (dynamic resolution moves it between min and this). */
+  /**
+   * Most drawing-buffer pixels: on a large high-DPI screen the pixel ratio is lowered to fit,
+   * since every pass (post included) costs per pixel.
+   */
+  maxPixels: number;
+  /** Scene pass resolution, relative to the canvas. */
   resolutionScale: number;
+  /** Lowest factor dynamic resolution may apply to the canvas pixel ratio. */
   minResolutionScale: number;
   reflectionScale: number;
   /** Ripple sim texels (x, y); the domain is 96 × 420 world units. */
@@ -31,6 +37,7 @@ export const TIERS: Record<Tier, Quality> = {
   ultra: {
     tier: 'ultra',
     pixelRatio: 2,
+    maxPixels: 3_700_000,
     resolutionScale: 1,
     minResolutionScale: 0.6,
     reflectionScale: 0.5,
@@ -51,6 +58,7 @@ export const TIERS: Record<Tier, Quality> = {
   high: {
     tier: 'high',
     pixelRatio: 2,
+    maxPixels: 2_400_000,
     resolutionScale: 0.8,
     minResolutionScale: 0.5,
     reflectionScale: 0.35,
@@ -71,6 +79,7 @@ export const TIERS: Record<Tier, Quality> = {
   medium: {
     tier: 'medium',
     pixelRatio: 1.5,
+    maxPixels: 1_600_000,
     resolutionScale: 0.9,
     minResolutionScale: 0.5,
     reflectionScale: 0.4,
@@ -91,6 +100,7 @@ export const TIERS: Record<Tier, Quality> = {
   low: {
     tier: 'low',
     pixelRatio: 1.25,
+    maxPixels: 1_000_000,
     resolutionScale: 0.75,
     minResolutionScale: 0.45,
     reflectionScale: 0.25,
@@ -120,22 +130,24 @@ export function autoTier(webgpu: boolean): Tier {
   return coarse ? 'low' : 'medium';
 }
 
+/** Canvas pixel ratio for a tier at this CSS size: the device's, within the tier's caps. */
+export function pixelRatioFor(q: Quality, width: number, height: number, dpr: number): number {
+  const fit = Math.sqrt(q.maxPixels / Math.max(1, width * height));
+  return Math.max(0.5, Math.min(dpr, q.pixelRatio, fit));
+}
+
 /**
- * Dynamic resolution: keeps the frame rate up by moving the scene resolution scale.
- * Reacts to sustained slow frames only (ignores one-off hitches).
+ * Dynamic resolution: keeps the frame rate up by scaling the canvas pixel ratio (so the scene
+ * and every post pass shrink together), between `min` and 1. Reacts to sustained slow frames
+ * only (ignores one-off hitches), faster going down than coming back up.
  */
 export class DynamicResolution {
   private avg = 16.7;
   private slow = 0;
   private fast = 0;
-  scale: number;
+  scale = 1;
 
-  constructor(
-    private readonly max: number,
-    private readonly min: number,
-  ) {
-    this.scale = max;
-  }
+  constructor(private readonly min: number) {}
 
   /** Returns the new scale when it changed, otherwise null. */
   sample(frameMs: number): number | null {
@@ -150,14 +162,14 @@ export class DynamicResolution {
       this.slow = Math.max(0, this.slow - 1);
       this.fast = Math.max(0, this.fast - 1);
     }
-    if (this.slow > 45 && this.scale > this.min) {
+    if (this.slow > 30 && this.scale > this.min) {
       this.slow = 0;
       this.scale = Math.max(this.min, this.scale - 0.1);
       return this.scale;
     }
-    if (this.fast > 240 && this.scale < this.max) {
+    if (this.fast > 240 && this.scale < 1) {
       this.fast = 0;
-      this.scale = Math.min(this.max, this.scale + 0.05);
+      this.scale = Math.min(1, this.scale + 0.05);
       return this.scale;
     }
     return null;
