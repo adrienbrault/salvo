@@ -31,7 +31,7 @@ const dart: EnemyArchetype = {
   hp: 2.5,
   value: 10,
   heavy: false,
-  hue: 'pink',
+  hue: 'red',
   // a: horizontal drift, b: descent speed, c: fire time (<0 = already fired)
   update(e, w, dt) {
     e.x += e.a * dt;
@@ -40,7 +40,7 @@ const dart: EnemyArchetype = {
     if (e.c > 0 && e.age >= e.c) {
       e.c = -1;
       if (canFire(e) && e.y > w.player.y + 20)
-        aimed(w, e.x, e.y - 2, 40 * w.diff.bulletSpeed, 1, 0, { hue: 'pink' });
+        aimed(w, e.x, e.y - 2, 40 * w.diff.bulletSpeed, 1, 0, { hue: 'red' });
     }
   },
 };

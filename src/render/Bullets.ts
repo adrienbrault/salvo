@@ -9,7 +9,7 @@ import {
   PlaneGeometry,
 } from 'three/webgpu';
 import type { Bullet, BulletStyle } from '../sim/types';
-import { dangerHue, hueColor } from './palette';
+import { DANGER, hueColor } from './palette';
 
 /**
  * Per-style visual recipe. Quads lie flat on the gameplay plane, rotated along velocity.
@@ -83,15 +83,19 @@ export class BulletLayer {
     const d = p.length();
     const core = smoothstep(shape.x, shape.x.mul(0.3), d).mul(shape.w);
     const body = smoothstep(shape.y, shape.y.mul(0.55), d);
+    // A bright ring at the edge of the hitbox around a dimmer fill: a shape nothing else has.
+    const edge = body.sub(smoothstep(shape.y.mul(0.72), shape.y.mul(0.45), d));
     const glow = pow(max(float(1).sub(d), 0), 2.2).mul(shape.z);
     if (rim) {
       // Premultiplied: rgb adds light, alpha darkens what is behind. The rim sits just outside
       // the body, so the hitbox stays exactly what you see.
       mat.blending = NormalBlending;
       mat.premultipliedAlpha = true;
-      const ink = smoothstep(min(shape.y.add(0.34), 1), shape.y, d);
-      const rgb = color.xyz.mul(body.add(glow.mul(0.3))).add(vec3(1, 1, 1).mul(core).mul(1.8));
-      const alpha = max(ink.mul(0.82), body).mul(min(color.w, 1));
+      const ink = smoothstep(min(shape.y.add(0.4), 1), shape.y, d);
+      const rgb = color.xyz
+        .mul(edge.add(body.mul(0.35)).add(glow.mul(0.15)))
+        .add(vec3(1, 1, 1).mul(core).mul(1.5));
+      const alpha = max(ink.mul(0.95), body).mul(min(color.w, 1));
       mat.colorNode = vec4(rgb.mul(color.w), alpha);
     } else {
       // The player's own shots: soft coloured streaks, no white-hot core (that is danger's).
@@ -149,7 +153,7 @@ export class BulletLayer {
         const f = 1 - Math.min(1, Math.max(0, (Math.sqrt(d2) - o.fogRadius * 0.7) / (o.fogRadius * 0.3)));
         vis *= f;
       }
-      const col = hueColor(this.rim ? dangerHue(b.hue) : b.hue);
+      const col = this.rim ? DANGER : hueColor(b.hue);
       const j = i * 4;
       c[j] = col.r;
       c[j + 1] = col.g;

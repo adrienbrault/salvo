@@ -6,7 +6,7 @@ import type { CameraRig } from '../CameraRig';
 import type { Sea } from '../env/Sea';
 import type { Trench, Wreck } from '../env/Trench';
 import type { Post } from '../Post';
-import { dangerHue, hueColor } from '../palette';
+import { DANGER, hueColor } from '../palette';
 import type { LightPool } from './Lights';
 import type { Particles } from './Particles';
 
@@ -320,7 +320,7 @@ export class FxDirector {
             speed: [4, 14],
             life: 0.5,
             size: 0.7,
-            color: hueColor(dangerHue(e.hue)),
+            color: DANGER,
             intensity: 3,
             kind: 'ember',
           });

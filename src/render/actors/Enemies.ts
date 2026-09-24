@@ -40,8 +40,9 @@ import { enemyGeometry } from './models';
 
 type RegularKind = Exclude<EnemyKind, 'boss'>;
 const KINDS: RegularKind[] = ['dart', 'weaver', 'turret', 'diver', 'orbiter', 'carrier', 'mine'];
+/** No enemy wears pink or magenta: that is enemy bullets' colour (`DANGER`). */
 const HUES: Record<RegularKind, Hue> = {
-  dart: 'pink',
+  dart: 'red',
   weaver: 'orange',
   turret: 'violet',
   diver: 'red',

@@ -26,13 +26,11 @@ export function hueColor(h: Hue): Color {
   return c;
 }
 
-/** Danger never wears the player's colours (cyan and blue shots): those bullets turn violet. */
-const DANGER_HUE: Partial<Record<Hue, Hue>> = { cyan: 'violet', blue: 'violet' };
-
-/** The hue an enemy bullet is drawn in. */
-export function dangerHue(h: Hue): Hue {
-  return DANGER_HUE[h] ?? h;
-}
+/**
+ * Every enemy bullet wears this, whoever fired it: a hot magenta that no effect, biome light or
+ * player shot uses, so danger reads at a glance.
+ */
+export const DANGER = new Color(0xff2ad0);
 
 /** Height of the gameplay plane above which nothing is simulated (render-only depth). */
 export const PLAY_Z = 0;

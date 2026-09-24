@@ -29,7 +29,7 @@ import { FxDirector } from './fx/FxDirector';
 import { LightPool } from './fx/Lights';
 import { Particles } from './fx/Particles';
 import { Post } from './Post';
-import { hueColor } from './palette';
+import { DANGER, hueColor } from './palette';
 import { FrameCompiler } from './precompile';
 import { autoTier, DynamicResolution, pixelRatioFor, type Quality, TIERS, type Tier } from './quality';
 import { yieldTask } from './yieldTask';
@@ -149,7 +149,7 @@ export class GameRenderer {
       scorch: (xy) => this.sea.scorchAt(xy),
     });
     this.enemies = new EnemyLayer(scene);
-    this.bullets = new BulletLayer(3000, 1, true);
+    this.bullets = new BulletLayer(3000, 0.5, true);
     this.shots = new BulletLayer(800, 0.4);
     scene.add(this.bullets.mesh, this.shots.mesh);
     this.particles = new Particles(renderer, scene, quality.particles, quality.motes);
@@ -378,13 +378,14 @@ export class GameRenderer {
         this.lights.add(px, py - 4, -4, this.shipLight, 1800, 70);
         this.sea.drop(px, py - 3, 2.2, 0.035 + Math.min(0.05, Math.hypot(p.vx, p.vy) * 0.0006));
       }
-      // A sample of bullets light the sea from above: bullet hell becomes a light show.
+      // A sample of bullets light the sea from above: bullet hell becomes a light show, kept
+      // faint so the walls around a dense pattern don't take the bullets' colour.
       const items = world.bullets.items;
       const budget = Math.max(0, this.quality.lights - 24);
       const stride = Math.max(1, Math.ceil(items.length / Math.max(1, budget)));
       for (let i = 0; i < items.length; i += stride) {
         const b = items[i]!;
-        this.lights.add(b.x, b.y, 0, hueColor(b.hue), 520, 56);
+        this.lights.add(b.x, b.y, 0, DANGER, 260, 56);
       }
       for (const e of world.enemies.items) {
         if (e.heavy) this.lights.add(e.x, e.y, 3, hueColor(e.hue), 1500, 60);
