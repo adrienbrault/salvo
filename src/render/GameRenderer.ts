@@ -266,6 +266,7 @@ export class GameRenderer {
     this.setChassis(CHASSIS[0]!);
     this.ship.group.visible = true;
     this.enemies.warm(true);
+    this.trench.prewarm(true);
     const fake = WARM_BULLETS;
     this.bullets.update(fake, WARM_VIEW);
     this.shots.update(fake, WARM_VIEW);
@@ -276,6 +277,7 @@ export class GameRenderer {
     this.post.update(1 / 60, 400, 700);
     this.post.render();
     this.enemies.warm(false);
+    this.trench.prewarm(false);
     this.bullets.update([], WARM_VIEW);
     this.shots.update([], WARM_VIEW);
     this.setChassis(null);

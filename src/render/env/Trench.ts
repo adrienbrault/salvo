@@ -267,7 +267,6 @@ export class Trench {
     this.cars.instanceMatrix.setUsage(DynamicDrawUsage);
     this.cars.frustumCulled = false;
     this.cars.castShadow = opts.shadows;
-    // Same flags as the asteroid field, so both share one (pre-warmed) pipeline.
     this.cars.receiveShadow = true;
     this.cars.layers.enable(AO_LAYER);
     this.root.add(this.cars);
@@ -515,6 +514,16 @@ export class Trench {
     }
     this.rocks.count = this.asteroids.length;
     this.rocks.visible = this.asteroids.length > 0;
+  }
+
+  /**
+   * Warm-up: show the asteroid field even in a biome without rocks, so its pipelines compile.
+   * Sharing the cars' material is not enough: three names an instanced mesh's matrix buffer
+   * after the mesh, so every InstancedMesh compiles shaders of its own.
+   */
+  prewarm(on: boolean): void {
+    this.rocks.count = on ? Math.max(1, this.asteroids.length) : this.asteroids.length;
+    this.rocks.visible = this.rocks.count > 0;
   }
 
   /** Random x that keeps the rock clear of the canyon walls at its depth. */

@@ -8,7 +8,7 @@ A pipeline compile stalls a frame for 50–500 ms, so every pipeline exists by t
 
 - Lights come from the fixed `LightPool` (point lights are never added or removed; requests compete for the pool each frame).
 - Variation is data: biome palettes, floor modes, haze and sky are uniforms; biome surfaces are texture-layer indices (`aInfo.x`, remapped per biome), never new materials.
-- A new kind of object is on screen during warmup. Its render-cache flags (instancing, `castShadow`, `receiveShadow`) match an object that is warmed — the asteroid field shares the maglev cars' pipeline for exactly this reason.
+- A new kind of object is on screen during warmup. Sharing a warmed object's material and flags is not enough for an `InstancedMesh`: three names its matrix buffer after the mesh, so each one compiles pipelines of its own (`Trench.prewarm` shows the asteroid field, absent from the first biome).
 - The space environment re-bakes into the same PMREM target, so `scene.environment` keeps its identity across biomes.
 - Shader code never depends on the canvas size, so resizes, rotations and dynamic resolution only reallocate render targets. Clustered lighting uses a fixed tile grid (`FixedClusteredLighting.ts`): three's own sizes the grid from the drawing buffer and bakes it into every lit shader, so each resize recompiled ~40 pipelines.
 
