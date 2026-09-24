@@ -40,6 +40,13 @@ export const HIT_CLEAR_RADIUS = 28;
 
 /** Base Mult-gauge gain per kill, before `gaugeGainMul`. */
 export const GAUGE_PER_KILL = 0.05;
+/** Gauge gained per Mult shard collected, before `gaugeGainMul`. */
+export const PICKUP_GAUGE = 0.02;
+/** Mult shards dropped per kill: regular, heavy and boss enemies. */
+export const PICKUP_DROPS = { regular: 1, heavy: 3, boss: 10 } as const;
+/** Speed at which shards settle into falling down the field (world units/s). */
+export const PICKUP_FALL = 14;
+
 /** Fraction of gauge bonus kept when hit. */
 export const GAUGE_KEEP_ON_HIT = 0.5;
 

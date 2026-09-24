@@ -12,6 +12,9 @@ import {
   HIT_INVULN,
   LEVEL_INTRO,
   LEVEL_OUTRO,
+  PICKUP_DROPS,
+  PICKUP_FALL,
+  PICKUP_GAUGE,
   PLAYER_BOUNDS,
   PLAYER_SPAWN,
 } from './constants';
@@ -33,6 +36,7 @@ import type {
   InputFrame,
   KillInfo,
   KillType,
+  Pickup,
   Player,
   PlayerStats,
   ScoreCalc,
@@ -78,7 +82,11 @@ export interface LevelTally {
   damageTaken: number;
   triggers: number[];
   moneyEarned: number;
+  pickups: number;
 }
+
+/** Most Mult shards on screen at once; a kill beyond it drops nothing. */
+const MAX_PICKUPS = 160;
 
 const newBullet = (): Bullet => ({
   x: 0,
@@ -136,6 +144,8 @@ const newEnemy = (): Enemy => ({
   dead: false,
 });
 
+const newPickup = (): Pickup => ({ x: 0, y: 0, px: 0, py: 0, vx: 0, vy: 0, age: 0, spin: 0 });
+
 const zeroByType = (): Record<KillType, number> => ({ tir: 0, impact: 0, renvoi: 0, onde: 0, reaction: 0 });
 
 /**
@@ -158,6 +168,8 @@ export class World {
   /** Friendly projectiles. */
   readonly shots = new Pool<Bullet>(newBullet);
   readonly waves: Wave[] = [];
+  /** Mult shards dropped by kills. */
+  readonly pickups = new Pool<Pickup>(newPickup);
   readonly fx: FxEvent[] = [];
   readonly tally: LevelTally;
 
@@ -183,6 +195,8 @@ export class World {
   private prevAction = false;
   private nextId = 1;
   private readonly director: Director;
+  /** Drops draw from their own stream, so they never shift the waves or anything else. */
+  private readonly lootRng: Rng;
   private hooks: HookEntry[] = [];
   private timeWarned = false;
   private blackoutOn = false;
@@ -195,6 +209,7 @@ export class World {
     this.constraint = spec.constraint ? CONSTRAINTS[spec.constraint] : null;
     this.timeLeft = spec.duration;
     this.director = new Director(this, rng.fork('director'));
+    this.lootRng = rng.fork('loot');
     this.tally = {
       kills: 0,
       killsByType: zeroByType(),
@@ -204,6 +219,7 @@ export class World {
       damageTaken: 0,
       triggers: [],
       moneyEarned: 0,
+      pickups: 0,
     };
 
     this.player = {
@@ -496,6 +512,7 @@ export class World {
     this.updateShots(dt);
     this.updateEnemyBullets(edt);
     this.updateWaves(dt);
+    this.updatePickups(dt);
     this.collidePlayer();
     this.removeDead();
 
@@ -736,6 +753,49 @@ export class World {
     }
   }
 
+  private dropPickups(x: number, y: number, count: number): void {
+    const rng = this.lootRng;
+    for (let i = 0; i < count && this.pickups.size < MAX_PICKUPS; i++) {
+      const p = this.pickups.spawn();
+      const ang = rng.next() * Math.PI * 2;
+      const speed = 8 + rng.next() * 14 + count * 1.5;
+      p.x = p.px = x;
+      p.y = p.py = y;
+      p.vx = Math.cos(ang) * speed;
+      p.vy = Math.sin(ang) * speed + 8;
+      p.age = 0;
+      p.spin = rng.next() * Math.PI * 2;
+    }
+  }
+
+  /** Shards burst out, settle into a fall, and are collected within the graze radius. */
+  private updatePickups(dt: number): void {
+    const pl = this.player;
+    const reach = this.stats.grazeRadius;
+    const canCollect = pl.alive && this.phase === 'play';
+    const items = this.pickups.items;
+    const settle = Math.min(1, dt * 2.5);
+    for (let i = items.length - 1; i >= 0; i--) {
+      const p = items[i]!;
+      p.px = p.x;
+      p.py = p.y;
+      p.age += dt;
+      p.vx *= 1 - settle;
+      p.vy += (-PICKUP_FALL - p.vy) * settle;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      if (canCollect && Math.hypot(p.x - pl.x, p.y - pl.y) < reach) {
+        const before = this.gauge;
+        this.addGauge(PICKUP_GAUGE);
+        this.tally.pickups++;
+        this.fx.push({ t: 'pickup', x: p.x, y: p.y, gauge: this.gauge - before });
+        this.pickups.releaseAt(i);
+      } else if (p.y < -FIELD.halfH - DESPAWN_MARGIN || Math.abs(p.x) > FIELD.halfW + DESPAWN_MARGIN) {
+        this.pickups.releaseAt(i);
+      }
+    }
+  }
+
   private updateWaves(dt: number): void {
     for (let i = this.waves.length - 1; i >= 0; i--) {
       const wv = this.waves[i]!;
@@ -879,6 +939,13 @@ export class World {
       repeats: calc.repeats,
     });
 
+    if (this.phase === 'play') {
+      this.dropPickups(
+        e.x,
+        e.y,
+        e.boss ? PICKUP_DROPS.boss : e.heavy ? PICKUP_DROPS.heavy : PICKUP_DROPS.regular,
+      );
+    }
     onEnemyDeath(e, this);
     if (this.stats.chainExplosions) {
       this.spawnWave(e.x, e.y, 10 + e.radius * 1.4, Math.max(3, e.maxHp * 0.45), 'reaction', {

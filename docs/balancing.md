@@ -7,7 +7,7 @@ Balance is measured, not guessed. The sim is deterministic, so a headless bot re
 `playLevel(run, { godMode })` in `src/test/bot.ts` builds the run's current level and plays it with `botInput`, which sways at the bottom of the field under the lowest enemy and fires the action on a fixed per-weapon rhythm. Its blind spots:
 
 - **God mode measures scoring potential, not survival.** It sets `invuln` every tick, so the bot is never hit: the gauge never halves, Untouchable's reset never happens, and Last Breath fires only through Glass Heart's 1 max HP. Difficulty (bullet density, patterns, fairness) needs a human in the browser (`docs/browser-testing.md`).
-- **Its play is crude.** It never grazes on purpose and fires its action on a timer (Mirror holds 1.4 s of every 2.2 s; Ram dashes every 50 ticks), whatever is on screen. Compare a chassis with its own earlier numbers, never with another chassis.
+- **Its play is crude.** It collects Mult shards only when they fall into its path. It never grazes on purpose and fires its action on a timer (Mirror holds 1.4 s of every 2.2 s; Ram dashes every 50 ticks), whatever is on screen. Compare a chassis with its own earlier numbers, never with another chassis.
 - **It plays single levels.** No shop, no `applyLevelResult`: rewards, interest and `onLevelEnd` hooks never run, so the economy is not simulated.
 
 ## The report
@@ -63,7 +63,7 @@ The `none` line matches the report's row for that level. Equipment, calibrations
 | Enemy HP, Shard value and patterns; the boss | `src/sim/enemies.ts`, `src/sim/boss.ts` |
 | Spawn budget, formation costs and weights, enemy cap | `src/sim/director.ts` |
 | Weapon numbers | the constant block above each weapon in `src/sim/weapons.ts` |
-| Gauge, hit and level-timing constants | `src/sim/constants.ts` |
+| Gauge, Mult shards (drops, value, fall speed), hit and level-timing constants | `src/sim/constants.ts` |
 
 ## Coupled numbers
 

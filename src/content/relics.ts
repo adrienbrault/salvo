@@ -308,7 +308,7 @@ export const RELIC_ITEMS: ItemDef[] = [
     rarity: 'common',
     price: 4,
     tags: ['graze'],
-    desc: '{k:Graze} radius {k:+60%}.',
+    desc: '{k:Graze} and pickup radius {k:+60%}.',
     modifyStats(s) {
       s.grazeRadius *= 1.6;
     },

@@ -44,6 +44,8 @@ Each kill scores `round(base × mult) × repeats`, built in `World.killEnemy`:
 
 The **gauge** is the level's running Mult: it starts at 1 each level, grows with kills and gauge effects (`addGauge`, scaled by `gaugeGainMul` and the constraint's `gaugeMul`), never drops below 1, and loses half its bonus above 1 on every hit. It rewards streaks and clean play, and keeps an item-less ship viable early on.
 
+**Mult shards** are the level's loot: every kill drops one (a heavy enemy 3, the boss 10), which bursts out, then falls through the field and off the bottom. Flying within the graze radius collects it into the gauge (`PICKUP_GAUGE`). They reward moving through the field rather than parking in a corner, and a hit halves the gauge they fed, so diving into a pattern for them is a risk the player chooses. Drops draw from their own seeded stream (`rng.fork('loot')`), so they never change a level's waves.
+
 Three kinds of scoring effect, each with its markup: **gauge** (`{g:}`) lasts the level and feeds every later kill; **+Mult / +Shards** (`{m:}` / `{b:}`) apply to this kill only; **×Mult** (`{x:}`) multiplies this kill's Mult as it stands when the relic runs.
 
 **Hook order** is weapon, engine, core (slot −1, their `trigger()` is silent), then relics left → right. Placement is the puzzle: a +Mult left of a ×Mult gets multiplied, the reverse does not — `sim.test.ts` pins (1 + 3) × 2.5 = 10 against 1 × 2.5 + 3 = 5.5. Stats follow the same order — base → weapon/engine/core → modules → relics — so a relic that *sets* a stat overrides everything before it (Glass Heart's max HP 1 wipes Armored Core and Hull Plating).

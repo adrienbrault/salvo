@@ -22,6 +22,23 @@ export type BulletStyle = 'orb' | 'bigOrb' | 'needle' | 'bolt' | 'spark' | 'refl
 /** Palette slot — renderers map it to HDR colors. */
 export type Hue = 'pink' | 'orange' | 'cyan' | 'lime' | 'violet' | 'gold' | 'white' | 'red' | 'blue';
 
+/**
+ * A Mult shard dropped by a kill: it pops out, then falls through the field. Flying within
+ * the graze radius collects it into the gauge.
+ */
+export interface Pickup {
+  x: number;
+  y: number;
+  /** Position at the previous step (render interpolation). */
+  px: number;
+  py: number;
+  vx: number;
+  vy: number;
+  age: number;
+  /** Render-only spin phase, seeded so shards don't turn in step. */
+  spin: number;
+}
+
 export interface Bullet {
   x: number;
   y: number;
@@ -214,6 +231,7 @@ export type FxEvent =
   | { t: 'score'; x: number; y: number; base: number; mult: number; total: number; repeats: number }
   | { t: 'relic'; slot: number; label?: string }
   | { t: 'money'; amount: number; x: number; y: number }
+  | { t: 'pickup'; x: number; y: number; gauge: number }
   | { t: 'heal'; x: number; y: number }
   | { t: 'enemyShot'; x: number; y: number; count: number }
   | { t: 'bossSpawn'; x: number; y: number }

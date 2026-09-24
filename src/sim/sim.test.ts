@@ -4,7 +4,7 @@ import { RELICS } from '../content/registry';
 import { currentSpec, levelRng } from '../run/run';
 import { newInstance } from '../run/state';
 import { freshRun, playLevel } from '../test/bot';
-import { DT } from './constants';
+import { DT, PICKUP_DROPS, PICKUP_FALL, PICKUP_GAUGE } from './constants';
 import { Rng } from './rng';
 import { computeStats } from './stats';
 import { emptyInput, type ScoreCalc } from './types';
@@ -60,6 +60,32 @@ describe('World', () => {
     expect(w.result).toBe('won');
     expect(w.score).toBeGreaterThanOrEqual(w.spec.quota);
     expect(w.enemies.size).toBe(0);
+  });
+
+  test('kills drop Mult shards that fall and are collected into the gauge', () => {
+    // Prism never fires on its own: no other kill drops shards meanwhile.
+    const run = freshRun('prisme');
+    const w = new World(run, currentSpec(run), levelRng(run));
+    while (w.phase !== 'play') w.step(emptyInput(), DT);
+    const e = w.spawnEnemy('dart', 30, 40);
+    w.damageEnemy(e, 999, 'tir');
+    expect(w.pickups.size).toBe(PICKUP_DROPS.regular);
+    const shard = w.pickups.items[0]!;
+    // Out of reach: it settles into a fall.
+    w.player.x = -40;
+    for (let i = 0; i < 180; i++) {
+      w.player.invuln = 1;
+      w.step(emptyInput(), DT);
+    }
+    expect(shard.vy).toBeCloseTo(-PICKUP_FALL, 0);
+    // Within the graze radius: collected into the gauge.
+    const gauge = w.gauge;
+    w.player.x = shard.x;
+    w.player.y = shard.y;
+    w.step(emptyInput(), DT);
+    expect(w.pickups.size).toBe(0);
+    expect(w.gauge).toBeCloseTo(gauge + PICKUP_GAUGE * w.stats.gaugeGainMul, 6);
+    expect(w.tally.pickups).toBe(1);
   });
 
   test('doing nothing times out', () => {
