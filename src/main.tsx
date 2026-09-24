@@ -6,6 +6,7 @@ import { Game } from './app/Game';
 import { Loop } from './app/Loop';
 import { installRafShim } from './app/rafShim';
 import { browserStore, loadSettings, saveSettings } from './app/save';
+import { provideSchedulerYield } from './app/schedulerYield';
 import { Audio } from './audio/Audio';
 import { InputController } from './input/Input';
 import { GameRenderer } from './render/GameRenderer';
@@ -80,9 +81,7 @@ async function boot(): Promise<void> {
 
   render(<App />, appRoot);
 
-  const scheduler = (globalThis as { scheduler?: { yield?: unknown } }).scheduler;
-  const restoreFrames =
-    params.has('rafshim') || typeof scheduler?.yield === 'function' ? null : installRafShim();
+  const removeYield = provideSchedulerYield();
   let gr: GameRenderer;
   try {
     gr = await GameRenderer.create({
@@ -98,7 +97,7 @@ async function boot(): Promise<void> {
     ui.bootError.value = err instanceof Error ? err.message : String(err);
     return;
   } finally {
-    restoreFrames?.();
+    removeYield();
   }
   ui.backend.value = { api: gr.isWebGPU ? 'WebGPU' : 'WebGL 2', tier: gr.quality.tier };
 

@@ -1,15 +1,10 @@
 /**
- * Drives requestAnimationFrame from a MessageChannel instead of the display, until the
- * returned function restores the real one. Two uses:
- *  - Boot, in browsers without `scheduler.yield()` (Safari): three waits on animation frames
- *    between pipeline compiles, and Safari did not deliver them there — boot never finished.
- *  - Testing (`?rafshim`, for the whole session): hidden or occluded windows — automated
- *    browsers — never fire requestAnimationFrame, which stalls boot and the game loop.
- *    See docs/browser-testing.md.
+ * Testing aid (`?rafshim`): hidden or occluded windows — automated browsers — never fire
+ * requestAnimationFrame, which stalls boot (three's WebGL backend polls pipeline compiles
+ * with it) and the game loop. This drives frames from a MessageChannel instead, which runs
+ * unthrottled while the page is hidden. See docs/browser-testing.md.
  */
-export function installRafShim(): () => void {
-  const raf = window.requestAnimationFrame;
-  const caf = window.cancelAnimationFrame;
+export function installRafShim(): void {
   const queue = new Map<number, FrameRequestCallback>();
   const channel = new MessageChannel();
   let nextId = 1;
@@ -32,10 +27,5 @@ export function installRafShim(): () => void {
   };
   window.cancelAnimationFrame = (id) => {
     queue.delete(id);
-  };
-  // Callbacks still queued run on the message already posted, then continue on real frames.
-  return () => {
-    window.requestAnimationFrame = raf;
-    window.cancelAnimationFrame = caf;
   };
 }
