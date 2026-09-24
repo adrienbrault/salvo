@@ -1,7 +1,7 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect } from 'preact/hooks';
 import { getItem, resolveRelicDef } from '../../content/registry';
-import { CALIBRATION_BONUS } from '../../content/upgrades';
+import { CALIBRATION_BONUS, KILL_TYPE_SOURCE } from '../../content/upgrades';
 import { computeStats, MODULE_EFFECT } from '../../sim/stats';
 import { KILL_TYPE_LABEL, KILL_TYPES } from '../../sim/types';
 import { ItemDetail } from '../components/ItemDetail';
@@ -268,6 +268,7 @@ function Build() {
                     <span class="mk-b">+{n * CALIBRATION_BONUS.base} Shards</span>{' '}
                     <span class="mk-m">+{n * CALIBRATION_BONUS.mult} Mult</span>
                   </span>
+                  <small class="calib-src">{KILL_TYPE_SOURCE[kt]}</small>
                 </li>
               );
             })}

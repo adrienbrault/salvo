@@ -20,6 +20,16 @@ const CALIB_COLOR: Record<KillType, string> = {
   reaction: '#ff922b',
 };
 
+/** What counts as a kill of each type, in plain words (the sources are in docs/design.md). */
+export const KILL_TYPE_SOURCE: Record<KillType, string> = {
+  tir: 'A Shot kill is an enemy destroyed by your shots: Blaster bolts and the Salvo.',
+  impact:
+    'An Impact kill is an enemy you ram: with the Ram’s dash, or by flying into it (without a dash, that hurts you too).',
+  renvoi: 'A Reflect kill is an enemy destroyed by the bullets your Mirror sends back.',
+  onde: 'A Wave kill is an enemy destroyed by a Wave: the Grazer’s Wave and graze sparks, or Supernova’s shockwave.',
+  reaction: 'A Reaction kill is an enemy destroyed by a Chain Reaction explosion.',
+};
+
 /** Workshop items applied immediately on purchase (never occupy a slot). */
 export const CALIBRATION_ITEMS: ItemDef[] = KILL_TYPES.map((kt) => ({
   id: `cal_${kt}`,
@@ -30,7 +40,7 @@ export const CALIBRATION_ITEMS: ItemDef[] = KILL_TYPES.map((kt) => ({
   color: CALIB_COLOR[kt],
   rarity: 'common',
   price: 3,
-  desc: `{k:${KILL_TYPE_LABEL[kt]}} kills: {b:+${CALIBRATION_BONUS.base} Shards} and {m:+${CALIBRATION_BONUS.mult} Mult} (stacks).`,
+  desc: `{k:${KILL_TYPE_LABEL[kt]}} kills: {b:+${CALIBRATION_BONUS.base} Shards} and {m:+${CALIBRATION_BONUS.mult} Mult} (stacks). ${KILL_TYPE_SOURCE[kt]}`,
 }));
 
 export const MODULE_ITEMS: ItemDef[] = [

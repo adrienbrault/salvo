@@ -810,14 +810,20 @@
 }
 .calib-list li {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 12px;
+  gap: 3px 12px;
   padding: 9px 0;
   border-bottom: 1px solid var(--line);
   font: 600 14px var(--font-ui);
 }
 .calib-lvl {
   margin-left: 6px;
+  color: var(--muted);
+}
+.calib-src {
+  flex-basis: 100%;
+  font: 400 13px / 1.35 var(--font-ui);
   color: var(--muted);
 }
 
