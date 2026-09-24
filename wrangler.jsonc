@@ -1,0 +1,13 @@
+// Cloudflare deploy: a static-assets Worker serving the production build (`bun run build`).
+// Deploy settings live here rather than in the dashboard. The one exception is the build
+// variable BUN_VERSION (Settings → Builds), which Workers Builds cannot read from this file.
+{
+  "name": "salvo",
+  "compatibility_date": "2026-09-24",
+  "routes": [{ "pattern": "salvo.brage.fr", "custom_domain": true }],
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./dist"
+  }
+}
