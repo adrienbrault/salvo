@@ -40,8 +40,16 @@ export const LAYER = {
   DECK: 9,
   RADIATOR: 10,
   GRIME: 11,
+  /** Asteroid rock: strata, ridges, cracks. */
+  ROCK: 12,
+  /** Basalt with glowing magma cracks (warm emissive channel). */
+  MAGMA: 13,
+  /** Plates in rust/primer paint, heavily weathered. */
+  PLATES_RUST: 14,
+  /** Clean shipyard panels: white/grey paint, light grime. */
+  PANELS_CLEAN: 15,
 } as const;
-export const LAYER_COUNT = 12;
+export const LAYER_COUNT = 16;
 
 export interface HullTextureSet {
   albedo: DataArrayTexture;
@@ -165,6 +173,18 @@ const SCHEMES: Record<string, Scheme> = {
     ['black', 2],
     ['steel', 1],
     ['graphite', 2],
+  ],
+  rust: [
+    ['primer', 4],
+    ['olive', 2],
+    ['graphite', 2],
+    ['gunmetal', 1],
+  ],
+  clean: [
+    ['white', 4],
+    ['grey', 3],
+    ['navy', 1],
+    ['steel', 1],
   ],
   mixed: [
     ['navy', 2],
@@ -332,6 +352,60 @@ class Painter {
     this.a.putImageData(alb, 0, 0);
     this.h.putImageData(hgt, 0, 0);
     this.o.putImageData(orm, 0, 0);
+    for (const d of this.decals) d();
+  }
+
+  /**
+   * Per-pixel rock: ridged relief, horizontal strata, crack networks (iso-lines of a noise
+   * field). With `glow` > 0 the cracks are molten: dark basalt with hot, emissive fissures.
+   */
+  rasterRock(base: RGB, glow: number): void {
+    const { px } = this;
+    const alb = new ImageData(px, px);
+    const hgt = new ImageData(px, px);
+    const orm = new ImageData(px, px);
+    const emi = new ImageData(px, px);
+    const ox = Math.floor(this.rnd() * px);
+    const oy = Math.floor(this.rnd() * px);
+    const at = (f: Float32Array, x: number, y: number) => f[((y + oy) % px) * px + ((x + ox) % px)]!;
+    const bands = 5;
+    for (let y = 0; y < px; y++) {
+      for (let x = 0; x < px; x++) {
+        const blotch = at(this.noise.blotch, x, y);
+        const mid = at(this.noise.mid, x, y);
+        const pit = at(this.noise.pit, x, y);
+        const streak = at(this.noise.streak, x, y);
+        const ridge = 1 - Math.abs(mid * 2 - 1);
+        const strata = 0.5 + 0.5 * Math.sin(2 * Math.PI * ((bands * y) / px + blotch * 0.9));
+        const crackD = Math.abs(at(this.noise.blotch, (x * 3) % px, (y * 3) % px) - 0.5);
+        const crack = Math.max(0, 1 - crackD / 0.035);
+        const halo = Math.max(0, 1 - crackD / 0.12);
+        let h = 0.35 + ridge * 0.3 + blotch * 0.2 + pit * 0.1 + strata * 0.06 - crack * 0.3;
+        h = Math.min(1, Math.max(0, h));
+        const shade = (0.62 + ridge * 0.35 + strata * 0.12 + (pit - 0.5) * 0.2) * (1 - crack * 0.8);
+        const j = (y * px + x) * 4;
+        const heat = glow * halo * halo;
+        alb.data[j] = base[0] * shade + heat * 90;
+        alb.data[j + 1] = base[1] * shade + heat * 30;
+        alb.data[j + 2] = base[2] * shade;
+        alb.data[j + 3] = 255;
+        const hv = h * 255;
+        hgt.data[j] = hv;
+        hgt.data[j + 1] = hv;
+        hgt.data[j + 2] = hv;
+        hgt.data[j + 3] = 255;
+        orm.data[j] = (1 - crack * 0.6) * 255;
+        orm.data[j + 1] = Math.min(1, 0.78 + (streak - 0.5) * 0.3 + crack * 0.1) * 255;
+        orm.data[j + 2] = 0.02 * 255;
+        orm.data[j + 3] = 255;
+        emi.data[j] = glow * Math.min(1, crack * 1.2 + halo * 0.25) * 255;
+        emi.data[j + 3] = 255;
+      }
+    }
+    this.a.putImageData(alb, 0, 0);
+    this.h.putImageData(hgt, 0, 0);
+    this.o.putImageData(orm, 0, 0);
+    if (glow > 0) this.e.putImageData(emi, 0, 0);
     for (const d of this.decals) d();
   }
 
@@ -659,6 +733,23 @@ function paintLayer(p: Painter, layer: number): void {
       }
       p.rect(0, s * 0.48, s, s * 0.04, { albedo: '#2c323c', height: 180, emissive: EMBER });
       break;
+    case LAYER.ROCK:
+      p.rasterRock([118, 104, 92], 0);
+      break;
+    case LAYER.MAGMA:
+      p.rasterRock([52, 44, 40], 1);
+      break;
+    case LAYER.PLATES_RUST:
+      plates(p, 0, 0, s, s, 3, 0.9, SCHEMES.rust!);
+      p.raster(1.7);
+      break;
+    case LAYER.PANELS_CLEAN: {
+      plates(p, 0, 0, s, s, 4, 1, SCHEMES.clean!);
+      p.raster(0.35);
+      const code = CODES[Math.floor(p.rnd() * CODES.length)]!;
+      p.stencil(code, s * p.r(0.1, 0.5), s * p.r(0.2, 0.9), 30, 0.45);
+      break;
+    }
     default:
       plates(p, 0, 0, s, s, 2, 0.4, SCHEMES.deck!);
       p.raster(2.2);
