@@ -17,6 +17,10 @@ const WEAPON_KILL_TYPE: Record<string, KillType> = {
   ram: 'impact',
 };
 
+/** The kill type the equipped weapon scores (the workshop favours its calibration). */
+export const weaponKillType = (run: RunState): KillType =>
+  WEAPON_KILL_TYPE[getItem(run.loadout.weapon.id).weapon ?? 'blaster'] ?? 'tir';
+
 const shopRng = (run: RunState, label: string): Rng =>
   new Rng(run.seed).fork(`shop-${run.shopVisits}-${label}`);
 
@@ -43,7 +47,7 @@ function rollOffers(run: RunState, rng: Rng): ShopOffer[] {
 }
 
 function rollWorkshop(run: RunState, rng: Rng): ShopOffer[] {
-  const weaponType = WEAPON_KILL_TYPE[getItem(run.loadout.weapon.id).weapon ?? 'blaster'] ?? 'tir';
+  const weaponType = weaponKillType(run);
   const calib = rng.weighted(CALIBRATION_ITEMS, (d) => (d.killType === weaponType ? 5 : 1));
   const modules = MODULE_ITEMS.filter((d) => d.id !== 'repair');
   const mod = rng.pick(modules);

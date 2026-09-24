@@ -13,6 +13,7 @@ import type { FxEvent } from '../sim/types';
 import { World } from '../sim/world';
 import type { Popups } from '../ui/Popups';
 import { bumpRun, type HudState, type Screen, toast, ui } from '../ui/store';
+import { purchaseMessage } from '../ui/upgrades';
 import {
   browserStore,
   clearRun,
@@ -199,7 +200,7 @@ export class Game {
   buy(area: 'offers' | 'workshop', index: number): void {
     const run = this.run;
     if (!run) return;
-    const offer = run.shop?.[area][index];
+    const id = run.shop?.[area][index]?.id;
     const res = shopBuy(run, area, index);
     if (!res.ok) {
       this.audio?.play('error');
@@ -215,10 +216,8 @@ export class Game {
       return;
     }
     this.audio?.play('buy');
-    if (res.replaced && offer) {
-      toast(`${getItem(res.replaced.id).name} replaced (+$${res.refund})`);
-      this.gr.setChassis(getChassis(run.chassis));
-    }
+    if (id) toast(purchaseMessage(run, getItem(id), res));
+    if (res.replaced) this.gr.setChassis(getChassis(run.chassis));
     saveRun(this.store, run);
     this.publishRun();
   }

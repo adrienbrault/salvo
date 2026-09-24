@@ -1,5 +1,5 @@
 import type { ComponentChildren, JSX } from 'preact';
-import { useRef, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { getItem, resolveRelicDef } from '../../content/registry';
 import { type ItemDef, type ItemInstance, sellValue } from '../../content/types';
 import { levelSpecFor } from '../../run/levels';
@@ -7,27 +7,44 @@ import { type BuyError, canBuy, rerollCost } from '../../run/shop';
 import { RELIC_SLOTS, type RunState, type ShopOffer } from '../../run/state';
 import { CONSTRAINTS } from '../../sim/constraints';
 import { computeEconomy, computeStats } from '../../sim/stats';
-import { KILL_TYPE_LABEL } from '../../sim/types';
 import { Counter } from '../components/Counter';
 import { type HoverBind, HoverDetail, useHover } from '../components/HoverDetail';
 import { ItemCard, SoldCard } from '../components/ItemCard';
 import { copyNote, ItemDetail } from '../components/ItemDetail';
 import { HpPips } from '../components/Pips';
+import { Rich } from '../components/Rich';
 import { fmt, fmtMoney } from '../format';
 import { game } from '../game';
 import { ABOVE, type Side } from '../place';
 import { ui } from '../store';
+import { ownedUpgrades, upgradeNote } from '../upgrades';
 
 type Area = 'offers' | 'workshop';
 type EquipSlot = 'weapon' | 'engine' | 'core';
 type Sel =
   | { area: Area; index: number }
   | { area: 'relics'; index: number }
-  | { area: 'equip'; slot: EquipSlot };
+  | { area: 'equip'; slot: EquipSlot }
+  /** A calibration or module already bought, by its workshop item id. */
+  | { area: 'upgrade'; id: string };
 
 const EQUIP_SLOTS: EquipSlot[] = ['weapon', 'engine', 'core'];
 
-const keyOf = (s: Sel): string => (s.area === 'equip' ? `equip-${s.slot}` : `${s.area}-${s.index}`);
+function keyOf(s: Sel): string {
+  if (s.area === 'equip') return `equip-${s.slot}`;
+  if (s.area === 'upgrade') return `upgrade-${s.id}`;
+  return `${s.area}-${s.index}`;
+}
+
+/** Where a bought item now lives, to flash it: a relic tile, a loadout slot, an upgrade chip, the hull. */
+function homeKey(def: ItemDef, run: RunState): string {
+  if (def.kind === 'relic') return `relic-${run.loadout.relics.at(-1)?.uid}`;
+  if (def.kind === 'weapon' || def.kind === 'engine' || def.kind === 'core') return `equip-${def.kind}`;
+  if (def.id === 'repair') return 'hp';
+  return `upgrade-${def.id}`;
+}
+
+const rich = (text: string | null) => text && <Rich text={text} />;
 
 /** What the detail panel and the hover detail both show for a target. */
 interface Detail {
@@ -56,8 +73,17 @@ export function Shop() {
   const run = ui.run.value;
   const [sel, setSel] = useState<Sel | null>(null);
   const [shake, setShake] = useState({ key: '', n: 0 });
+  const [flash, setFlash] = useState({ key: '', n: 0 });
   const hover = useHover<Sel>();
   const shop = run?.shop;
+  // Bring what was just bought into view (phones scroll the shop).
+  useEffect(() => {
+    if (flash.n === 0) return;
+    const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    document
+      .querySelector('.shop .flash')
+      ?.parentElement?.scrollIntoView({ block: 'nearest', behavior: smooth ? 'smooth' : 'auto' });
+  }, [flash.n]);
   if (!run || !shop) return null;
   const g = game();
 
@@ -78,19 +104,19 @@ export function Shop() {
       const inst = run.loadout[t.slot];
       return { def: getItem(inst.id), inst, note: null, foot: null };
     }
+    if (t.area === 'upgrade') {
+      const def = getItem(t.id);
+      return { def, note: rich(upgradeNote(run, def)), foot: null };
+    }
     if (t.area === 'offers' || t.area === 'workshop') {
       const o = shop[t.area][t.index];
       if (!o?.id) return null;
       const def = getItem(o.id);
       const err = canBuy(run, o);
-      let note: string | null = null;
+      let note: ComponentChildren = rich(upgradeNote(run, def));
       if (def.kind === 'weapon' || def.kind === 'engine' || def.kind === 'core') {
         const old = run.loadout[def.kind];
         note = `Replaces ${getItem(old.id).name} (sold back for $${sellValue(old)}).`;
-      } else if (def.kind === 'calibration' && def.killType) {
-        note = `Current ${KILL_TYPE_LABEL[def.killType]} level: ${run.calibrations[def.killType]}.`;
-      } else if (def.id === 'repair' || def.id === 'mod_hull') {
-        note = `Hull: ${run.hp}/${maxHp} HP.`;
       }
       return { def, note, foot: err && <span class="detail-warn">{buyError(err, run, o)}</span> };
     }
@@ -117,12 +143,20 @@ export function Shop() {
 
   const buy = (area: Area, index: number) => {
     const offer = shop[area][index];
-    if (!offer) return;
+    if (!offer?.id) return;
+    const def = getItem(offer.id);
     const err = canBuy(run, offer);
     g.buy(area, index);
-    if (err) setShake((s) => ({ key: `${area}-${index}`, n: s.n + 1 }));
-    else setSel(null);
+    if (err) {
+      setShake((s) => ({ key: `${area}-${index}`, n: s.n + 1 }));
+      return;
+    }
+    setSel(null);
+    setFlash((f) => ({ key: homeKey(def, run), n: f.n + 1 }));
   };
+  // A brief highlight inside the element with this key, replayed per purchase by its `key`.
+  const flashOn = (key: string) => flash.key === key && <i class="flash" key={flash.n} aria-hidden="true" />;
+  const upgrades = ownedUpgrades(run);
 
   const row = (area: Area) => {
     const out: JSX.Element[] = [];
@@ -214,7 +248,12 @@ export function Shop() {
       <header class="shop-head">
         <div>
           <h2>Shop</h2>
-          <HpPips hp={run.hp} max={maxHp} key={run.hp} />
+          <HpPips
+            hp={run.hp}
+            max={maxHp}
+            class={flash.key === 'hp' ? 'bumped' : ''}
+            key={`${run.hp}/${maxHp}-${flash.key === 'hp' ? flash.n : 0}`}
+          />
         </div>
         <div class="shop-money money">
           <Counter value={run.money} format={fmtMoney} punch />
@@ -261,6 +300,7 @@ export function Shop() {
             run={run}
             selected={sel?.area === 'relics' ? sel.index : -1}
             hover={(i) => bindHover({ area: 'relics', index: i }, ABOVE)}
+            flash={flashOn}
             onGrab={hover.hide}
             onSelect={(i) => toggle({ area: 'relics', index: i })}
             onMove={(from, to) => {
@@ -282,12 +322,40 @@ export function Shop() {
                   {...bindHover({ area: 'equip', slot }, ABOVE)}
                   onClick={() => toggle({ area: 'equip', slot })}
                 >
+                  {flashOn(`equip-${slot}`)}
                   <span class="equip-glyph">{def.glyph}</span>
                   <span class="equip-name">{def.name}</span>
                 </button>
               );
             })}
           </div>
+          {upgrades.length > 0 && (
+            <div class="upgrade-row">
+              <span class="upgrade-label">Upgrades</span>
+              {upgrades.map((u) => {
+                const def = getItem(u.id);
+                const t: Sel = { area: 'upgrade', id: u.id };
+                const on = selKey === keyOf(t);
+                return (
+                  <button
+                    type="button"
+                    key={u.id}
+                    class={on ? 'upgrade-chip selected' : 'upgrade-chip'}
+                    style={{ '--c': def.color }}
+                    aria-pressed={on}
+                    aria-label={`${u.label} ${u.value}`}
+                    {...bindHover(t, ABOVE)}
+                    onClick={() => toggle(t)}
+                  >
+                    {flashOn(keyOf(t))}
+                    <span class="upgrade-glyph">{def.glyph}</span>
+                    {u.label}
+                    <b>{u.value}</b>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </section>
       </div>
 
@@ -342,6 +410,8 @@ interface TrayProps {
   run: RunState;
   selected: number;
   hover(i: number): HoverBind;
+  /** The purchase highlight for the element with this key (`relic-<uid>`), if any. */
+  flash(key: string): JSX.Element | false;
   /** A press may start a drag: the hover detail gets out of the way. */
   onGrab(): void;
   onSelect(i: number): void;
@@ -349,7 +419,7 @@ interface TrayProps {
 }
 
 /** Owned relics: tap to inspect, drag to reorder (mouse or touch). */
-function RelicTray({ run, selected, hover, onGrab, onSelect, onMove }: TrayProps) {
+function RelicTray({ run, selected, hover, flash, onGrab, onSelect, onMove }: TrayProps) {
   const relics = run.loadout.relics;
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const drag = useRef<{ from: number; id: number; x0: number; y0: number; active: boolean } | null>(null);
@@ -447,6 +517,7 @@ function RelicTray({ run, selected, hover, onGrab, onSelect, onMove }: TrayProps
       >
         <span class="tray-order">{i + 1}</span>
         <span class="tray-tile">
+          {flash(`relic-${inst.uid}`)}
           <span class="tray-glyph">{def.glyph}</span>
           {copied && <span class="rslot-copy">{copied.glyph}</span>}
         </span>

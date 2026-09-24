@@ -144,6 +144,7 @@
 }
 .equip {
   --c: var(--cyan);
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -171,6 +172,67 @@
 .equip-name {
   min-width: 0;
   font: 600 13px / 1.15 var(--font-ui);
+}
+
+/* Calibrations and modules bought: permanent and slotless, so they get a row of chips. */
+.upgrade-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+.upgrade-label {
+  margin-right: 4px;
+  font: 600 13px / 1 var(--font-ui);
+  color: var(--muted);
+}
+.upgrade-chip {
+  --c: var(--cyan);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 12px 0 10px;
+  border: 0;
+  font: 600 13px / 1 var(--font-ui);
+  color: var(--ink);
+  background: rgba(10, 13, 28, 0.78);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, transparent);
+  clip-path: var(--chamfer);
+  --cut: 7px;
+  cursor: pointer;
+}
+.upgrade-glyph {
+  font: 700 17px / 1 var(--font-ui);
+  color: var(--c);
+}
+.upgrade-chip b {
+  font: 700 16px / 1 var(--font-num);
+  color: var(--c);
+}
+.upgrade-chip.selected {
+  box-shadow: inset 0 0 0 2px #fff;
+}
+.upgrade-chip:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--cyan);
+}
+
+/* Purchase highlight: where a bought item now lives lights up once. */
+.flash {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--c, var(--cyan)) 55%, #fff);
+  box-shadow: inset 0 0 0 3px #fff;
+  mix-blend-mode: screen;
+  animation: flash-out 1.4s ease-out both;
+}
+.shop-head .hp-pips.bumped {
+  animation: hp-bump 0.35s var(--pop);
 }
 
 /* Side: detail, next level, leave. On tall screens the detail is a bottom sheet. */
@@ -297,11 +359,26 @@
   }
 }
 
+@keyframes flash-out {
+  0%,
+  25% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+  }
+}
 @keyframes sheet-up {
   from {
     transform: translateY(100%);
   }
   to {
     transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shop-head .hp-pips.bumped {
+    animation: none;
   }
 }
