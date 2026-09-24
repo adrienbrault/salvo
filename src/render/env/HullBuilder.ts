@@ -204,6 +204,86 @@ export class HullBuilder {
     );
   }
 
+  /**
+   * Smooth surface through a rows × cols grid of points. Columns (j) run along the viewer's
+   * right (u), rows (i) upward (v); normals and tangents come from finite differences, so any
+   * displacement (rock, terrain) shades correctly. `hint` supplies a normal where the grid is
+   * degenerate (poles).
+   */
+  grid(
+    rows: number,
+    cols: number,
+    at: (i: number, j: number) => V3,
+    uvAt: (i: number, j: number) => readonly [number, number],
+    s: Surf,
+    hint?: (i: number, j: number) => V3,
+  ): void {
+    const pts: V3[] = [];
+    for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) pts.push(at(i, j));
+    const get = (i: number, j: number) =>
+      pts[Math.min(rows - 1, Math.max(0, i)) * cols + Math.min(cols - 1, Math.max(0, j))]!;
+    const base = this.vertexCount;
+    for (let i = 0; i < rows; i++) {
+      for (let j = 0; j < cols; j++) {
+        const du = sub(get(i, j + 1), get(i, j - 1));
+        const dv = sub(get(i + 1, j), get(i - 1, j));
+        const c = cross(du, dv);
+        const n = len(c) > 1e-9 ? norm(c) : norm(hint ? hint(i, j) : [0, 0, 1]);
+        const along = (d: V3): V3 => sub(d, scale(n, d[0] * n[0] + d[1] * n[1] + d[2] * n[2]));
+        let tRaw = along(du);
+        // A collapsed row (a pole) has no direction of its own: borrow its neighbour's.
+        for (const k of [i + 1, i - 1]) {
+          if (len(tRaw) <= 1e-9) tRaw = along(sub(get(k, j + 1), get(k, j - 1)));
+        }
+        const t = len(tRaw) > 1e-9 ? norm(tRaw) : norm(cross(n, [0, 0, 1]));
+        const [u, v] = uvAt(i, j);
+        this.vert(get(i, j), n, u, v, t, s);
+      }
+    }
+    for (let i = 0; i < rows - 1; i++) {
+      for (let j = 0; j < cols - 1; j++) {
+        const a = base + i * cols + j;
+        this.idx.push(a, a + 1, a + cols + 1, a, a + cols + 1, a + cols);
+      }
+    }
+  }
+
+  /** Box with arbitrary orientation: centre, orthonormal axes (right-handed) and half extents. */
+  orientedBox(c: V3, ax: V3, ay: V3, az: V3, hx: number, hy: number, hz: number, s: Surf): void {
+    const p = (a: number, b: number, d: number): V3 =>
+      add(add(add(c, scale(ax, a)), scale(ay, b)), scale(az, d));
+    this.quad(p(hx, -hy, -hz), scale(ay, 2 * hy), scale(az, 2 * hz), s);
+    this.quad(p(-hx, hy, -hz), scale(ay, -2 * hy), scale(az, 2 * hz), s);
+    this.quad(p(hx, hy, -hz), scale(ax, -2 * hx), scale(az, 2 * hz), s);
+    this.quad(p(-hx, -hy, -hz), scale(ax, 2 * hx), scale(az, 2 * hz), s);
+    this.quad(p(-hx, -hy, hz), scale(ax, 2 * hx), scale(ay, 2 * hy), s);
+    this.quad(p(-hx, hy, -hz), scale(ax, 2 * hx), scale(ay, -2 * hy), s);
+  }
+
+  /** Square lattice beam from a to b: four chords plus zig-zag bracing. */
+  truss(a: V3, b: V3, width: number, s: Surf): void {
+    const axis = sub(b, a);
+    const l = len(axis);
+    const z = norm(axis);
+    const helper: V3 = Math.abs(z[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+    const x = scale(norm(cross(helper, z)), width / 2);
+    const y = scale(norm(cross(z, x)), width / 2);
+    const corners: V3[] = [add(x, y), sub(x, y), scale(add(x, y), -1), sub(y, x)];
+    const r = width * 0.07;
+    for (const o of corners) this.tube(add(a, o), add(b, o), r, 4, s);
+    const steps = Math.max(1, Math.round(l / width));
+    for (let i = 0; i < steps; i++) {
+      const p0 = add(a, scale(z, (l * i) / steps));
+      const p1 = add(a, scale(z, (l * (i + 1)) / steps));
+      for (let k = 0; k < 4; k++) {
+        const o0 = corners[k]!;
+        const o1 = corners[(k + 1) % 4]!;
+        const flip = (i + k) % 2 === 0;
+        this.tube(add(flip ? p0 : p1, o0), add(flip ? p1 : p0, o1), r * 0.7, 4, s);
+      }
+    }
+  }
+
   /** Flat disc (cap) facing +z at height z. */
   disc(cx: number, cy: number, z: number, r: number, segments: number, s: Surf): void {
     const tile = s.tile ?? DEFAULT_TILE;
