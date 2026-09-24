@@ -4,7 +4,7 @@ import type { World } from '../../sim/world';
 import type { PlayerShip } from '../actors/PlayerShip';
 import type { CameraRig } from '../CameraRig';
 import type { Sea } from '../env/Sea';
-import type { Trench } from '../env/Trench';
+import type { Trench, Wreck } from '../env/Trench';
 import type { Post } from '../Post';
 import { hueColor } from '../palette';
 import type { LightPool } from './Lights';
@@ -14,7 +14,15 @@ const WHITE = new Color(1, 1, 1);
 const EMBER = new Color(1, 0.45, 0.12);
 const DEBRIS = new Color(0.9, 0.85, 1);
 const HURT = new Color(1, 0.15, 0.2);
+const FIRE = new Color(1, 0.5, 0.18);
+const HOT_METAL = new Color(1, 0.62, 0.4);
+const ROCK = new Color(0.55, 0.5, 0.46);
 const _s = new Vector2();
+/** Wrecks handled per frame (each takes a few of the particle system's emitter slots). */
+const WRECKS_PER_FRAME = 3;
+/** Fires fed with flames per frame, and how many light up their surroundings. */
+const FLAMES_PER_FRAME = 4;
+const FIRE_LIGHTS = 4;
 
 /**
  * Turns simulation events into spectacle: GPU particles, light flashes, sea ripples,
@@ -30,6 +38,9 @@ export class FxDirector {
   private aberrationKick = 0;
   private dangerLevel = 0;
   private flashLevel = 0;
+  private clock = 0;
+  private flameTimer = 0;
+  private flameCursor = 0;
 
   constructor(
     private readonly rig: CameraRig,
@@ -101,6 +112,7 @@ export class FxDirector {
           this.trench.shockwave(e.x, e.y, 0.25 + s * 0.08);
           this.particles.shock(e.x, e.y, 60 + s * 12);
           this.rig.addTrauma(Math.min(0.35, 0.05 + s * 0.02));
+          this.trench.damage(e.x, e.y, 6 + s * 2.5, 0.4 + s * 0.15);
           if (big) {
             this.screenShock(e.x, e.y, 0.35, 0.03);
             this.bloomKick = Math.max(this.bloomKick, 0.5);
@@ -128,6 +140,8 @@ export class FxDirector {
             }
             this.sea.drop(e.x, e.y, 22, 2.5);
             this.trench.shockwave(e.x, e.y, 3);
+            // The boss takes the neighbourhood with it, all the way out across the deck.
+            this.trench.damage(e.x, e.y, 150, 6);
           }
           break;
         }
@@ -213,6 +227,7 @@ export class FxDirector {
           this.lights.flash(e.x, e.y, 3, WHITE, 40000, 120, 1.2);
           this.screenShock(e.x, e.y, 1, 0.08, 1.4);
           this.sea.drop(e.x, e.y, 26, 3);
+          this.trench.damage(e.x, e.y, 60, 4);
           break;
         case 'graze':
           this.particles.emit({
@@ -247,6 +262,7 @@ export class FxDirector {
           });
           this.lights.flash(e.x, e.y, 3, col, 9000 + e.maxR * 300, 40 + e.maxR * 1.5, 0.5);
           this.sea.drop(e.x, e.y, e.maxR * 0.35, 1.6);
+          this.trench.damage(e.x, e.y, e.maxR * 1.1, 1.2);
           this.rig.addTrauma(0.25);
           this.bloomKick = Math.max(this.bloomKick, 0.6);
           break;
@@ -328,8 +344,133 @@ export class FxDirector {
     }
   }
 
+  /** Destruction in the environment: what just broke, and what is still burning. */
+  private wreckage(dt: number): void {
+    const wrecks = this.trench.wrecks;
+    for (const w of wrecks.splice(0, WRECKS_PER_FRAME)) this.wreck(w);
+
+    const fires = this.trench.fires;
+    if (!fires.length) return;
+    this.flameTimer -= dt;
+    if (this.flameTimer <= 0) {
+      this.flameTimer = 0.07;
+      for (let k = 0; k < Math.min(FLAMES_PER_FRAME, fires.length); k++) {
+        const f = fires[this.flameCursor++ % fires.length]!;
+        const spread = f.size * 0.3;
+        this.particles.emit({
+          x: f.x + (Math.random() - 0.5) * spread,
+          y: f.y + (Math.random() - 0.5) * spread,
+          z: f.z,
+          count: Math.round(2 + f.size * 0.35 * f.heat),
+          speed: [1.5, 5 + f.size * 0.15],
+          life: 0.7 + f.heat * 0.6,
+          size: 1 + f.size * 0.06,
+          color: FIRE,
+          intensity: 1.5 + f.heat * 2.5,
+          kind: 'flame',
+          zBias: 1,
+        });
+      }
+    }
+    // The biggest fires light the wreckage around them, flickering.
+    const lit =
+      fires.length <= FIRE_LIGHTS ? fires : [...fires].sort((a, b) => b.size * b.heat - a.size * a.heat);
+    for (let i = 0; i < Math.min(FIRE_LIGHTS, lit.length); i++) {
+      const f = lit[i]!;
+      const flicker = 0.7 + 0.3 * Math.sin(this.clock * 23 + i * 7) * Math.sin(this.clock * 13.7 + i);
+      this.lights.add(f.x, f.y, f.z + 3, FIRE, (700 + f.size * 140) * f.heat * flicker, 22 + f.size);
+    }
+  }
+
+  private wreck(w: Wreck): void {
+    const s = w.size;
+    const at = { x: w.x, y: w.y, z: w.z };
+    if (w.kind === 'rock') {
+      this.particles.emit({
+        ...at,
+        count: Math.round(14 + s * 3),
+        speed: [4, 16 + s],
+        life: 2.2,
+        size: 0.8,
+        color: ROCK,
+        intensity: 0.9,
+        kind: 'debris',
+        zBias: 1,
+      });
+      this.particles.emit({
+        ...at,
+        count: Math.round(6 + s),
+        speed: [3, 10],
+        life: 1.2,
+        size: 1,
+        color: EMBER,
+        intensity: 2,
+        kind: 'ember',
+        zBias: 1,
+      });
+      this.lights.flash(w.x, w.y, w.z + 4, FIRE, 1500 + s * 200, 30 + s * 2, 0.35);
+      return;
+    }
+    const blast = w.kind !== 'collapse';
+    const k = w.kind === 'blast' ? 1 : w.kind === 'car' ? 0.6 : 0.35;
+    this.particles.emit({
+      ...at,
+      count: Math.round((30 + s * 3) * k * 2),
+      speed: [10, 30 + s * 2 * k],
+      life: 0.9,
+      size: 0.8,
+      color: blast ? FIRE : EMBER,
+      intensity: blast ? 5 : 3,
+      kind: 'spark',
+      zBias: 0.8,
+    });
+    this.particles.emit({
+      ...at,
+      count: Math.round(8 + s * 0.8),
+      speed: [6, 14 + s * 0.6],
+      life: 2.4,
+      size: 0.7,
+      color: HOT_METAL,
+      intensity: 1.6,
+      kind: 'debris',
+      zBias: 0.9,
+    });
+    this.particles.emit({
+      ...at,
+      count: Math.round(6 + s * k),
+      speed: [3, 10 + s * 0.3],
+      life: 1.8,
+      size: 1.3,
+      color: EMBER,
+      intensity: 3,
+      kind: 'ember',
+      zBias: 1,
+    });
+    this.lights.flash(
+      w.x,
+      w.y,
+      w.z + 4,
+      FIRE,
+      (2500 + s * 300) * (blast ? 3 : 1),
+      30 + s * 2,
+      blast ? 0.7 : 0.45,
+    );
+    this.trench.shockwave(
+      w.x,
+      w.y,
+      w.kind === 'blast' ? 0.6 + s * 0.02 : w.kind === 'car' ? 0.3 : 0.12 + s * 0.01,
+    );
+    this.rig.addTrauma(Math.min(0.3, (0.03 + s * 0.004) * (blast ? 3 : 1)));
+    if (blast) {
+      this.particles.shock(w.x, w.y, 60 + s * 3);
+      this.bloomKick = Math.max(this.bloomKick, 0.3 * k);
+    }
+  }
+
   /** Per-frame decay of transient post effects. */
   update(dt: number, gauge: number): void {
+    this.clock += dt;
+    this.wreckage(dt);
     this.bloomKick = Math.max(0, this.bloomKick - dt * 1.5);
     this.aberrationKick = Math.max(0, this.aberrationKick - dt * 2.5);
     this.dangerLevel = Math.max(0, this.dangerLevel - dt * 1.2);

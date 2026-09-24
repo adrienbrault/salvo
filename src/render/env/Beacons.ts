@@ -1,13 +1,17 @@
 import { BufferGeometry, Float32BufferAttribute } from 'three/webgpu';
 
-/** Emissive-only geometry (beacons and light bars) with a per-vertex (kind, phase). */
+/** Emissive-only geometry (beacons and light bars) with a per-vertex (kind, phase) and part. */
 export class BeaconBuilder {
   private readonly pos: number[] = [];
   private readonly attr: number[] = [];
+  private readonly parts: number[] = [];
+  /** Breakable part index given to every light added from now on (0 = none). */
+  part = 0;
 
   private tri(a: number[], b: number[], c: number[], kind: number, phase: number): void {
     this.pos.push(...a, ...b, ...c);
     for (let i = 0; i < 3; i++) this.attr.push(kind, phase);
+    this.parts.push(this.part, this.part, this.part);
   }
 
   /** Small octahedron light. */
@@ -43,6 +47,7 @@ export class BeaconBuilder {
     const g = new BufferGeometry();
     g.setAttribute('position', new Float32BufferAttribute(this.pos, 3));
     g.setAttribute('aBeacon', new Float32BufferAttribute(this.attr, 2));
+    g.setAttribute('aPart', new Float32BufferAttribute(this.parts, 1));
     g.computeBoundingSphere();
     return g;
   }

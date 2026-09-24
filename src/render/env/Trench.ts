@@ -6,19 +6,25 @@ import {
   floor,
   fract,
   hash,
+  int,
+  ivec2,
   max,
   mix,
   mx_noise_float,
+  normalLocal,
   normalMap,
   normalView,
   parallaxDirection,
+  positionLocal,
   positionViewDirection,
   positionWorld,
   pow,
   sin,
   smoothstep,
   step,
+  tangentLocal,
   texture,
+  textureLoad,
   time,
   uniform,
   uniformArray,
@@ -41,6 +47,7 @@ import {
   MeshBasicNodeMaterial,
   MeshStandardNodeMaterial,
   type Node,
+  type NodeBuilder,
   Quaternion,
   type Scene,
   Vector3,
@@ -50,11 +57,21 @@ import { Rng } from '../../sim/rng';
 import type { LightPool } from '../fx/Lights';
 import { AO_LAYER, SCROLL_SPEED } from '../palette';
 import type { BiomeDef } from './biomes';
+import {
+  animateBreak,
+  breakIt,
+  PART_TEXELS,
+  PartTable,
+  partCenter,
+  posePoint,
+  reach,
+  resetBreakable,
+} from './breakables';
 import { HullBuilder, type Surf } from './HullBuilder';
 import { type HullTextureSet, LAYER } from './HullTextures';
-import { type Materials, SEG, type Segment, TRENCH } from './layout';
+import { type Breakable, type Materials, type Prop, SEG, type Segment, TRENCH } from './layout';
 import { asteroidGeometry } from './rock';
-import { SegmentBuilder } from './SegmentBuilder';
+import { MAX_PARTS, SegmentBuilder } from './SegmentBuilder';
 
 export { TRENCH } from './layout';
 
@@ -67,6 +84,12 @@ const CARS = 6;
 const CAR_LEN = 9.6;
 const CAR_GAP = 0.9;
 const MAX_ROCKS = 48;
+/** Shockwave rings race out at this speed (world units/s); blast damage travels with them. */
+const RING_SPEED = 130;
+const TRAIN_HP = 1.2;
+/** Seconds between a wrecked train's cars going up, one after the other. */
+const CAR_DELAY = 0.16;
+const CAR_BURN = 5;
 /** Asteroids live in this band along y (the visible trench plus margins) and wrap around. */
 const ROCK_SPAN = ACTIVE * SEG + 40;
 
@@ -85,6 +108,9 @@ interface Asteroid {
   rot: Euler;
   spin: Vector3;
   drift: number;
+  hp: number;
+  /** Trench clock when it was blown apart; −1 while whole. */
+  deadAt: number;
 }
 
 interface Train {
@@ -93,6 +119,39 @@ interface Train {
   speed: number;
   wait: number;
   on: boolean;
+  hp: number;
+  /** Trench clock when it was wrecked; −1 while running. */
+  wreckAt: number;
+  /** Cars already blown up (from the front). */
+  lost: number;
+}
+
+/** Something that just blew apart (world coordinates), for the FX director. */
+export interface Wreck {
+  /** collapse: a structure gives way; blast: an explosive one goes up; car / rock: a train car or asteroid. */
+  kind: 'collapse' | 'blast' | 'car' | 'rock';
+  x: number;
+  y: number;
+  z: number;
+  size: number;
+}
+
+/** Something burning on the wreckage (world coordinates, refreshed every frame). */
+export interface Fire {
+  x: number;
+  y: number;
+  z: number;
+  size: number;
+  /** 1 when it starts, falling to 0 as it burns out. */
+  heat: number;
+}
+
+/** Blast damage on its way to a structure (it lands when the shockwave ring gets there). */
+interface Hit {
+  b: Breakable;
+  seg: Segment;
+  dmg: number;
+  at: number;
 }
 
 export interface TrenchOptions {
@@ -101,6 +160,44 @@ export interface TrenchOptions {
   shadows: boolean;
   /** Parallax offset mapping on the hull (one extra dependent texture read). */
   parallax: boolean;
+}
+
+/** How long a broken structure burns (and its metal glows). */
+const burnTime = (b: Breakable): number => (b.explosive ? 10 : Math.min(9, 4 + b.size * 0.15));
+
+/**
+ * Reads a vertex's row of the part table (see PartTable): `pose` moves a point or direction
+ * the way its part has fallen, `broken` / `heat` say how it looks. Row 0 never moves.
+ */
+function partNodes(table: PartTable) {
+  const row = int(attribute<'float'>('aPart', 'float')).mul(PART_TEXELS);
+  const q = textureLoad(table.texture, ivec2(row, int(0)));
+  const pivot = textureLoad(table.texture, ivec2(row.add(1), int(0)));
+  const state = textureLoad(table.texture, ivec2(row.add(2), int(0)));
+  const rotate = (v: Node<'vec3'>): Node<'vec3'> => v.add(q.xyz.cross(q.xyz.cross(v).add(v.mul(q.w))).mul(2));
+  return {
+    rotate,
+    position: rotate(positionLocal.sub(pivot.xyz))
+      .add(pivot.xyz)
+      .sub(vec3(0, 0, pivot.w)),
+    /** Collapsed onto the pivot once broken: the lights of a fallen structure are gone. */
+    collapsed: mix(positionLocal, pivot.xyz, state.x),
+    state,
+  };
+}
+
+/** Hull material whose normals and tangents follow falling parts too (for lighting and AO). */
+class HullMaterial extends MeshStandardNodeMaterial {
+  constructor(private readonly rotate: (v: Node<'vec3'>) => Node<'vec3'>) {
+    super();
+  }
+
+  override setupPosition(builder: NodeBuilder): Node {
+    const p = super.setupPosition(builder);
+    normalLocal.assign(this.rotate(normalLocal));
+    tangentLocal.assign(this.rotate(tangentLocal));
+    return p;
+  }
 }
 
 // ── The trench ─────────────────────────────────────────────────────────────────
@@ -134,8 +231,19 @@ export class Trench {
   private readonly rocks: InstancedMesh;
   private asteroids: Asteroid[] = [];
   private readonly mats: Materials;
+  /** Poses of every breakable part in the segment pool (MAX_PARTS rows per segment, after row 0). */
+  private readonly table = new PartTable(1 + POOL * MAX_PARTS);
   private rng = new Rng('trench');
   private biomeKey = '';
+  /** Seconds since the trench was created (breakables and wrecks are timed against it). */
+  private clock = 0;
+  private readonly hits: Hit[] = [];
+  private readonly detonations: { b: Breakable; seg: Segment; at: number }[] = [];
+  private readonly carFires: { x: number; y: number; z: number; at: number }[] = [];
+  /** Destruction since the FX director last drained it. */
+  readonly wrecks: Wreck[] = [];
+  /** What is burning right now. */
+  readonly fires: Fire[] = [];
 
   constructor(
     scene: Scene,
@@ -168,7 +276,16 @@ export class Trench {
     this.rocks.layers.enable(AO_LAYER);
     this.root.add(this.rocks);
     for (const side of [-1, 1] as const) {
-      this.trains.push({ side, y: 0, speed: 0, wait: this.rng.float(0.5, 3), on: false });
+      this.trains.push({
+        side,
+        y: 0,
+        speed: 0,
+        wait: this.rng.float(0.5, 3),
+        on: false,
+        hp: TRAIN_HP,
+        wreckAt: -1,
+        lost: 0,
+      });
     }
     this.updateTrains(0, null);
 
@@ -188,7 +305,13 @@ export class Trench {
     const nrm = texture(tex.normal, st).depth(layer);
     const em = texture(tex.emissive, st).depth(layer);
 
-    const mat = new MeshStandardNodeMaterial();
+    const part = partNodes(this.table);
+    const mat = new HullMaterial(part.rotate);
+    mat.positionNode = part.position;
+    // Broken structures are charred; freshly broken metal glows with heat.
+    const broken = part.state.x.toVertexStage();
+    const glow = part.state.y.toVertexStage();
+    const char = float(1).sub(broken.mul(0.72));
     // Light pools along the trench; the deck far from it sinks into the night.
     const falloff = mix(float(0.3), float(1), smoothstep(230, 60, abs(positionWorld.x)));
     // Macro variation at a frequency unrelated to the tiles hides repetition (UVs are
@@ -197,9 +320,19 @@ export class Trench {
     const micro = texture(tex.macro, st0.mul(4.7)).b;
     const grime = smoothstep(0.35, 0.9, macro.r).mul(0.45).add(macro.g.mul(0.12));
     const tone = macro.a.mul(0.3).add(0.85);
-    mat.colorNode = alb.rgb.mul(info.z).mul(this.tint).mul(falloff).mul(float(1).sub(grime)).mul(tone);
+    mat.colorNode = alb.rgb
+      .mul(info.z)
+      .mul(this.tint)
+      .mul(falloff)
+      .mul(float(1).sub(grime))
+      .mul(tone)
+      .mul(char);
     mat.aoNode = orm.r;
-    mat.roughnessNode = orm.g.add(grime.mul(0.3)).add(micro.sub(0.5).mul(0.16)).clamp(0.04, 1);
+    mat.roughnessNode = orm.g
+      .add(grime.mul(0.3))
+      .add(micro.sub(0.5).mul(0.16))
+      .add(broken.mul(0.35))
+      .clamp(0.04, 1);
     mat.metalnessNode = orm.b;
     mat.normalNode = normalMap(nrm);
     mat.envMapIntensity = 1;
@@ -233,7 +366,16 @@ export class Trench {
       ring = ring.add(smoothstep(6, 0, d.sub(s.z).abs()).mul(s.w));
     }
     const wave = accentCol.mul(ring.mul(em.g.mul(4).add(em.r.mul(2)).add(0.35)));
-    mat.emissiveNode = warm.add(accent).add(red).mul(info.y).add(wave);
+    // Glowing seams and patches on hot wreckage, cooling from orange to nothing.
+    const grain = texture(tex.macro, st0.mul(0.9));
+    const embers = vec3(1, 0.3, 0.05)
+      .mul(glow.mul(glow).mul(glow).mul(2.6))
+      .mul(
+        smoothstep(0.62, 0.9, grain.b.mul(0.7).add(macro.b.mul(0.3))).add(
+          smoothstep(0.35, 0.1, height).mul(0.3),
+        ),
+      );
+    mat.emissiveNode = warm.add(accent).add(red).mul(info.y).mul(float(1).sub(broken)).add(wave).add(embers);
     return mat;
   }
 
@@ -266,6 +408,7 @@ export class Trench {
     );
     const mat = new MeshBasicNodeMaterial();
     mat.colorNode = red.mul(k0).add(acc.mul(k1)).add(strobe.mul(k2)).add(lamp.mul(k3)).add(flow.mul(k4));
+    mat.positionNode = partNodes(this.table).collapsed;
     return mat;
   }
 
@@ -283,6 +426,7 @@ export class Trench {
       .add(0.8);
     const col = vec3(1, 0.78, 0.55).mul(pow(along, 1.8).mul(edge).mul(dust).mul(0.3));
     mat.colorNode = vec4(col, 1);
+    mat.positionNode = partNodes(this.table).collapsed;
     return mat;
   }
 
@@ -309,7 +453,14 @@ export class Trench {
     const { cfg, layout } = def.plan(this.rng.fork('plan'));
     const segments: Segment[] = [];
     for (let i = 0; i < POOL; i++) {
-      const seg = new SegmentBuilder(this.rng.fork(`seg${i}`), this.mats, cfg, def.remap).build(layout);
+      const seg = new SegmentBuilder(
+        this.rng.fork(`seg${i}`),
+        this.mats,
+        cfg,
+        def.remap,
+        1 + i * MAX_PARTS,
+      ).build(layout);
+      for (const b of seg.breakables) this.table.set(b, 0);
       seg.group.visible = false;
       this.root.add(seg.group);
       segments.push(seg);
@@ -321,6 +472,10 @@ export class Trench {
     });
     this.spares.length = 0;
     this.spares.push(...segments.slice(ACTIVE));
+    this.hits.length = 0;
+    this.detonations.length = 0;
+    this.carFires.length = 0;
+    this.wrecks.length = 0;
 
     const ar = this.rng.fork('asteroids');
     this.asteroids = [];
@@ -335,7 +490,10 @@ export class Trench {
         rot: new Euler(ar.float(0, 6), ar.float(0, 6), ar.float(0, 6)),
         spin: new Vector3(ar.float(-0.3, 0.3), ar.float(-0.3, 0.3), ar.float(-0.3, 0.3)),
         drift: ar.float(-3, 3),
+        hp: 0,
+        deadAt: -1,
       };
+      a.hp = rockHp(a);
       this.placeAsteroid(a, ar);
       this.asteroids.push(a);
     }
@@ -367,12 +525,127 @@ export class Trench {
     slot.set(x, y, 0, strength);
   }
 
+  /**
+   * A blast at world (x, y, z): structures, train cars and asteroids within `radius` take up
+   * to `power` damage (less with distance), each when the shockwave ring reaches it.
+   */
+  damage(x: number, y: number, radius: number, power: number, z = 0): void {
+    for (const seg of this.active) {
+      const sy = seg.group.position.y;
+      for (const b of seg.breakables) {
+        if (b.brokenAt >= 0) continue;
+        const d = reach(b, x, y - sy, z);
+        if (d < radius)
+          this.hits.push({ b, seg, dmg: power * (1 - d / radius), at: this.clock + d / RING_SPEED });
+      }
+    }
+    const T = TRENCH;
+    for (const tr of this.trains) {
+      if (!tr.on || tr.wreckAt >= 0) continue;
+      const len = CARS * (CAR_LEN + CAR_GAP);
+      const y0 = tr.speed > 0 ? tr.y - len : tr.y;
+      const dx = Math.abs(x - tr.side * T.railX) - 2;
+      const dyy = Math.max(y0 - y, 0, y - (y0 + len));
+      const d = Math.hypot(Math.max(0, dx), dyy) + Math.abs(z - T.terraceZ) * 0.3;
+      if (d < radius) {
+        tr.hp -= power * (1 - d / radius);
+        if (tr.hp <= 0) tr.wreckAt = this.clock;
+      }
+    }
+    for (const a of this.asteroids) {
+      if (a.deadAt >= 0) continue;
+      const d = Math.max(0, Math.hypot(a.x - x, a.y - y) - a.size.x) + Math.abs(a.z - z) * 0.3;
+      if (d < radius) {
+        a.hp -= power * (1 - d / radius);
+        if (a.hp <= 0) {
+          a.deadAt = this.clock;
+          this.wrecks.push({ kind: 'rock', x: a.x, y: a.y, z: a.z, size: a.size.x });
+        }
+      }
+    }
+  }
+
+  private breakDown(b: Breakable, seg: Segment): void {
+    breakIt(b, this.clock);
+    for (const p of seg.props) if (p.owner === b) p.restQ.copy(p.obj.quaternion);
+    const sy = seg.group.position.y;
+    const x = (b.x0 + b.x1) / 2;
+    const y = sy + (b.y0 + b.y1) / 2;
+    this.wrecks.push({ kind: 'collapse', x, y, z: b.zTop, size: b.size });
+    if (b.explosive) this.detonations.push({ b, seg, at: this.clock + this.rng.float(0.15, 0.4) });
+  }
+
+  /** Applies blast damage whose ring has arrived, sets off explosives, poses what is falling. */
+  private updateDestruction(): void {
+    const now = this.clock;
+    for (let i = this.hits.length - 1; i >= 0; i--) {
+      const h = this.hits[i]!;
+      if (h.at > now) continue;
+      this.hits.splice(i, 1);
+      if (h.b.brokenAt >= 0 || !this.active.includes(h.seg)) continue;
+      h.b.hp -= h.dmg;
+      if (h.b.hp <= 0) this.breakDown(h.b, h.seg);
+    }
+    for (let i = this.detonations.length - 1; i >= 0; i--) {
+      const d = this.detonations[i]!;
+      if (d.at > now) continue;
+      this.detonations.splice(i, 1);
+      if (!this.active.includes(d.seg)) continue;
+      const b = d.b;
+      const x = (b.x0 + b.x1) / 2;
+      const y = d.seg.group.position.y + (b.y0 + b.y1) / 2;
+      const z = b.zTop * 0.5 + TRENCH.hullZ * 0.5;
+      this.wrecks.push({ kind: 'blast', x, y, z, size: b.size });
+      this.damage(x, y, 10 + b.size * 0.6, 2, z);
+    }
+    this.fires.length = 0;
+    for (const seg of this.active) {
+      const sy = seg.group.position.y;
+      for (const b of seg.breakables) {
+        if (b.brokenAt < 0) continue;
+        const age = now - b.brokenAt;
+        const burn = burnTime(b);
+        if (age < burn + 0.5) {
+          animateBreak(b, age);
+          this.table.set(b, Math.max(0, 1 - age / burn));
+        }
+        if (age >= burn) continue;
+        for (const p of b.parts) {
+          partCenter(p, _v);
+          this.fires.push({
+            x: _v.x,
+            y: sy + _v.y,
+            z: _v.z,
+            size: Math.min(24, b.size / b.parts.length),
+            heat: 1 - age / burn,
+          });
+        }
+      }
+    }
+    for (let i = this.carFires.length - 1; i >= 0; i--) {
+      const f = this.carFires[i]!;
+      const age = now - f.at;
+      if (age >= CAR_BURN || f.y < Y_MIN) this.carFires.splice(i, 1);
+      else this.fires.push({ x: f.x, y: f.y, z: f.z, size: 4, heat: 1 - age / CAR_BURN });
+    }
+  }
+
   update(dt: number, t: number, lights: LightPool, player: { x: number; y: number } | null): void {
+    this.clock += dt;
     const dy = SCROLL_SPEED * dt;
     for (const seg of this.active) seg.group.position.y -= dy;
+    for (const f of this.carFires) f.y -= dy;
     while (this.active[0] && this.active[0].group.position.y + SEG < Y_MIN) {
       const old = this.active.shift()!;
       old.group.visible = false;
+      for (const b of old.breakables) {
+        resetBreakable(b);
+        this.table.set(b, 0);
+      }
+      for (const p of old.props) {
+        p.obj.position.copy(p.rest);
+        if (p.owner) p.obj.quaternion.copy(p.restQ);
+      }
       const top = this.active[this.active.length - 1]!;
       const next = this.spares.splice(Math.floor(this.rng.next() * this.spares.length), 1)[0]!;
       this.spares.push(old);
@@ -384,6 +657,10 @@ export class Trench {
     for (const seg of this.active) {
       const sy = seg.group.position.y;
       for (const p of seg.props) {
+        if (p.owner && p.owner.brokenAt >= 0) {
+          this.ride(p);
+          continue;
+        }
         if (p.kind === 'spin') {
           p.obj.rotation.z += p.speed * dt;
           continue;
@@ -399,6 +676,7 @@ export class Trench {
       }
       if (this.opts.lamps) {
         for (const l of seg.lamps) {
+          if (l.owner && l.owner.brokenAt >= 0) continue;
           const wy = sy + l.y;
           if (wy > -130 && wy < 190) lights.add(l.x, wy, l.z, l.color, l.intensity, l.distance);
         }
@@ -407,6 +685,7 @@ export class Trench {
 
     this.updateTrains(dt, lights);
     this.updateAsteroids(dt, dy);
+    this.updateDestruction();
 
     for (const s of this.shocks) {
       if (s.w <= 0.002) {
@@ -420,6 +699,14 @@ export class Trench {
     this.alert.value += (this.alertTarget - this.alert.value) * Math.min(1, dt * 2);
   }
 
+  /** A prop on a broken structure rides its part down. */
+  private ride(p: Prop): void {
+    const part = p.owner!.parts[p.part ?? 0];
+    if (!part) return;
+    posePoint(part, p.rest, p.obj.position);
+    p.obj.quaternion.multiplyQuaternions(part.q, p.restQ);
+  }
+
   private updateAsteroids(dt: number, dy: number): void {
     if (!this.asteroids.length) return;
     this.asteroids.forEach((a, i) => {
@@ -427,13 +714,19 @@ export class Trench {
       if (a.y < Y_MIN - 20) {
         a.y += ROCK_SPAN;
         this.placeAsteroid(a, this.rng);
+        // A fresh rock comes round in place of a shattered one.
+        a.deadAt = -1;
+        a.hp = rockHp(a);
       } else if (a.y > Y_MIN - 20 + ROCK_SPAN) a.y -= ROCK_SPAN;
       a.rot.x += a.spin.x * dt;
       a.rot.y += a.spin.y * dt;
       a.rot.z += a.spin.z * dt;
       _v.set(a.x, a.y, a.z);
       _q.setFromEuler(a.rot);
-      _m.compose(_v, _q, a.size);
+      // Shattered: gone in a fifth of a second.
+      const k = a.deadAt < 0 ? 1 : Math.max(0, 1 - (this.clock - a.deadAt) * 5);
+      _s.copy(a.size).multiplyScalar(k);
+      _m.compose(_v, _q, _s);
       this.rocks.setMatrixAt(i, _m);
     });
     this.rocks.instanceMatrix.needsUpdate = true;
@@ -449,29 +742,46 @@ export class Trench {
           tr.speed = up ? this.rng.float(24, 42) : -this.rng.float(34, 60);
           tr.y = up ? -240 : 300;
           tr.on = true;
+          tr.hp = TRAIN_HP;
+          tr.wreckAt = -1;
+          tr.lost = 0;
         }
       } else {
         tr.y += tr.speed * dt;
-        if (tr.y < -300 || tr.y > 360) {
+        if (tr.y < -300 || tr.y > 360 || tr.lost === CARS) {
           tr.on = false;
-          tr.wait = this.rng.float(1, 5);
+          tr.wait = this.rng.float(tr.lost ? 4 : 1, tr.lost ? 8 : 5);
         }
       }
       const dir = Math.sign(tr.speed) || 1;
+      const wrecked = tr.wreckAt >= 0;
+      if (wrecked) {
+        // Brakes on: the wreck grinds to a halt against the scrolling trench.
+        tr.speed += (-SCROLL_SPEED - tr.speed) * Math.min(1, dt * 2.5);
+      }
       for (let c = 0; c < CARS; c++) {
         const y = tr.y - dir * (CAR_LEN / 2 + c * (CAR_LEN + CAR_GAP));
         _v.set(tr.side * T.railX, y, T.terraceZ + 0.75);
-        _s.setScalar(tr.on ? 1 : 0);
+        if (wrecked && c === tr.lost && this.clock - tr.wreckAt >= c * CAR_DELAY) {
+          tr.lost++;
+          this.wrecks.push({ kind: 'car', x: _v.x, y, z: _v.z + 1.2, size: 4 });
+          this.carFires.push({ x: _v.x, y, z: _v.z + 0.5, at: this.clock });
+        }
+        _s.setScalar(tr.on && c >= tr.lost ? 1 : 0);
         _q.identity();
         _m.compose(_v, _q, _s);
         this.cars.setMatrixAt(ti * CARS + c, _m);
       }
-      if (tr.on && lights && tr.y > -150 && tr.y < 200) {
+      if (tr.on && !wrecked && lights && tr.y > -150 && tr.y < 200) {
         lights.add(tr.side * T.railX, tr.y + dir * 3, T.terraceZ + 2.5, HEADLIGHT, 2200, 48);
       }
     });
     this.cars.instanceMatrix.needsUpdate = true;
   }
+}
+
+function rockHp(a: Asteroid): number {
+  return 0.5 + a.size.x * 0.12;
 }
 
 function carGeometry(): BufferGeometry {

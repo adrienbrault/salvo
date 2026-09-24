@@ -1,4 +1,12 @@
-import type { Color, Group, MeshBasicNodeMaterial, MeshStandardNodeMaterial, Object3D } from 'three/webgpu';
+import type {
+  Color,
+  Group,
+  MeshBasicNodeMaterial,
+  MeshStandardNodeMaterial,
+  Object3D,
+  Quaternion,
+  Vector3,
+} from 'three/webgpu';
 import { FLOOR_Z } from '../palette';
 
 /** Cross-section of the trench, for the +x side (mirrored for −x). World units. */
@@ -34,6 +42,12 @@ export interface Prop {
   y: number;
   speed: number;
   angle: number;
+  /** The breakable it stands on (and which of its parts): once that is broken the prop rides the fall. */
+  owner?: Breakable;
+  part?: number;
+  /** Rest pose (segment-local), and its orientation when the owner broke. */
+  rest: Vector3;
+  restQ: Quaternion;
 }
 
 export interface Lamp {
@@ -43,12 +57,58 @@ export interface Lamp {
   color: Color;
   intensity: number;
   distance: number;
+  /** The breakable it belongs to: once that is broken the lamp is out. */
+  owner?: Breakable;
+}
+
+/** How a broken structure comes down. */
+export type Fall = 'topple' | 'slump' | 'sink' | 'hinge';
+
+/**
+ * One rigid part of a breakable. Its vertices (hull, beacons, light cones) carry `aPart` =
+ * `index`, and the materials pose them from that row of the part table (see PartTable).
+ */
+export interface BreakPart {
+  index: number;
+  /** Segment-local point it falls about. */
+  pivot: Vector3;
+  axis: Vector3;
+  angle: number;
+  sink: number;
+  duration: number;
+  /** Centre of the part relative to the pivot (where its fire burns). */
+  center: Vector3;
+  /** Current pose: rotation about the pivot, then a drop along −z. */
+  q: Quaternion;
+  drop: number;
+}
+
+/**
+ * A structure that explosions can bring down: parts of the segment's own meshes (no extra
+ * draw calls) that the vertex shader rotates about their pivots once broken.
+ */
+export interface Breakable {
+  /** Segment-local footprint and top, used for hit tests. */
+  x0: number;
+  x1: number;
+  y0: number;
+  y1: number;
+  zTop: number;
+  /** Rough size, for effects. */
+  size: number;
+  hp: number;
+  maxHp: number;
+  explosive: boolean;
+  parts: BreakPart[];
+  /** Trench clock when it broke; −1 while intact. */
+  brokenAt: number;
 }
 
 export interface Segment {
   group: Group;
   props: Prop[];
   lamps: Lamp[];
+  breakables: Breakable[];
 }
 
 export interface Materials {

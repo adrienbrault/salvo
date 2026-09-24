@@ -1,4 +1,4 @@
-import { BufferGeometry, Float32BufferAttribute, Uint32BufferAttribute } from 'three/webgpu';
+import { Box3, BufferGeometry, Float32BufferAttribute, Uint32BufferAttribute, Vector3 } from 'three/webgpu';
 
 export type V3 = readonly [number, number, number];
 
@@ -36,8 +36,8 @@ const norm = (a: V3): V3 => scale(a, 1 / (len(a) || 1));
 /**
  * Accumulates hull geometry with the attributes the hull material expects:
  * position, normal, uv (in texture repeats, world-aligned so neighbours tile seamlessly),
- * tangent (explicit, so normal maps are lit correctly on every face) and
- * `aInfo` = (layer, emit, shade, phase).
+ * tangent (explicit, so normal maps are lit correctly on every face),
+ * `aInfo` = (layer, emit, shade, phase) and `aPart` (the breakable part it belongs to, 0 = none).
  *
  * Every primitive follows one convention: `du` is the viewer's right and `dv` the viewer's up
  * when looking at the front face, so textures are never mirrored and the face normal is
@@ -49,7 +49,10 @@ export class HullBuilder {
   private readonly uvs: number[] = [];
   private readonly tan: number[] = [];
   private readonly info: number[] = [];
+  private readonly parts: number[] = [];
   private readonly idx: number[] = [];
+  /** Breakable part index given to every vertex added from now on. */
+  part = 0;
 
   get vertexCount(): number {
     return this.pos.length / 3;
@@ -61,6 +64,7 @@ export class HullBuilder {
     this.uvs.push(u, v);
     this.tan.push(t[0], t[1], t[2], 1);
     this.info.push(s.layer, s.emit ?? 1, s.shade ?? 1, s.phase ?? 0);
+    this.parts.push(this.part);
     return this.pos.length / 3 - 1;
   }
 
@@ -297,6 +301,14 @@ export class HullBuilder {
     for (let j = 0; j < segments; j++) this.idx.push(c, c + 1 + j, c + 2 + j);
   }
 
+  /** Bounds of the vertices added in [from, to). */
+  bounds(from: number, to = this.vertexCount): Box3 {
+    const box = new Box3();
+    const v = new Vector3();
+    for (let i = from; i < to; i++) box.expandByPoint(v.fromArray(this.pos, i * 3));
+    return box;
+  }
+
   build(): BufferGeometry {
     const g = new BufferGeometry();
     g.setAttribute('position', new Float32BufferAttribute(this.pos, 3));
@@ -304,6 +316,7 @@ export class HullBuilder {
     g.setAttribute('uv', new Float32BufferAttribute(this.uvs, 2));
     g.setAttribute('tangent', new Float32BufferAttribute(this.tan, 4));
     g.setAttribute('aInfo', new Float32BufferAttribute(this.info, 4));
+    g.setAttribute('aPart', new Float32BufferAttribute(this.parts, 1));
     g.setIndex(new Uint32BufferAttribute(this.idx, 1));
     g.computeBoundingBox();
     g.computeBoundingSphere();

@@ -1,18 +1,22 @@
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
+  Box3,
   type BufferGeometry,
   Color,
   ConeGeometry,
+  Float32BufferAttribute,
   Group,
   Matrix4,
   Mesh,
+  type Object3D,
   Quaternion,
   Vector3,
 } from 'three/webgpu';
 import type { Rng } from '../../sim/rng';
 import { AO_LAYER, FLOOR_Z } from '../palette';
 import { BeaconBuilder } from './Beacons';
-import { HullBuilder, type Surf } from './HullBuilder';
+import { type BreakOpts, fallFor } from './breakables';
+import { HullBuilder, type Surf, type V3 } from './HullBuilder';
 import { LAYER } from './HullTextures';
 import {
   B_ACCENT,
@@ -20,6 +24,7 @@ import {
   B_LAMP,
   B_RED,
   B_STROBE,
+  type Breakable,
   type Lamp,
   type Materials,
   type Prop,
@@ -44,35 +49,55 @@ export type CellKind = 'tower' | 'dome' | 'radiator' | 'mast' | 'dish' | 'turret
 /** Layer substitutions a biome applies to everything it builds (e.g. clean or rusty paint). */
 export type LayerRemap = Readonly<Partial<Record<number, number>>>;
 
+/** One part of a breakable: what to build, and optionally a hinge (else it stands on its base). */
+export interface PartSpec {
+  build: () => BreakOpts | undefined;
+  pivot?: V3;
+  axis?: V3;
+  angle?: number;
+}
+
+/** Most breakables a segment may hold, and the part-table rows each segment reserves. */
+export const MAX_BREAKABLES = 24;
+export const MAX_PARTS = MAX_BREAKABLES * 2;
+
 /**
  * Builds one scrolling segment. It is a kit: primitives (boxes, walls, decks, domes, masts,
- * dishes, turrets, rock, trusses…) that biome layouts (see biomes.ts) compose. All hull
- * pieces share one geometry/material, so a segment is a handful of draw calls.
+ * dishes, turrets, rock, trusses…) that biome layouts (see biomes.ts) compose. Static hull
+ * pieces share one geometry/material, so a segment is a handful of draw calls; breakable
+ * structures live in that same geometry, their vertices tagged with a part-table row.
  */
 export class SegmentBuilder {
+  private readonly props: Prop[] = [];
+  private readonly lamps: Lamp[] = [];
+  private readonly breakables: Breakable[] = [];
+  private readonly group = new Group();
   readonly hb = new HullBuilder();
   readonly bb = new BeaconBuilder();
   private readonly cones: BufferGeometry[] = [];
-  private readonly props: Prop[] = [];
-  private readonly lamps: Lamp[] = [];
-  private readonly group = new Group();
+  /** The breakable (and part) being built, which props, lights and cones then belong to. */
+  private owner: Breakable | undefined;
+  private part = 0;
+  private nextPart: number;
 
+  /** `firstPart` is this segment's first row in the part table (it takes MAX_PARTS rows). */
   constructor(
     readonly rng: Rng,
     private readonly m: Materials,
     readonly cfg: SideConfig,
     private readonly remap: LayerRemap = {},
-  ) {}
+    private readonly firstPart = 1,
+  ) {
+    this.nextPart = firstPart;
+  }
 
   build(layout: (b: SegmentBuilder) => void): Segment {
     layout(this);
-    const geo = this.hb.build();
-    remapLayers(geo, this.remap);
-    const hull = new Mesh(geo, this.m.hull);
-    hull.castShadow = this.m.shadows;
-    hull.receiveShadow = true;
-    hull.layers.enable(AO_LAYER);
-    this.group.add(hull);
+    const mesh = new Mesh(this.hb.build(), this.m.hull);
+    mesh.castShadow = this.m.shadows;
+    mesh.receiveShadow = true;
+    mesh.layers.enable(AO_LAYER);
+    this.group.add(mesh);
     const beacons = this.bb.build();
     if (beacons) this.group.add(new Mesh(beacons, this.m.beacon));
     if (this.cones.length) {
@@ -80,9 +105,115 @@ export class SegmentBuilder {
       cones.renderOrder = 5;
       this.group.add(cones);
     }
-    for (const p of this.props)
-      p.obj.traverse((o) => o instanceof Mesh && remapLayers(o.geometry, this.remap));
-    return { group: this.group, props: this.props, lamps: this.lamps };
+    // One remap pass over every hull mesh: the segment and its props.
+    this.group.traverse((o) => {
+      if (o instanceof Mesh && o.material === this.m.hull) remapLayers(o.geometry, this.remap);
+    });
+    return { group: this.group, props: this.props, lamps: this.lamps, breakables: this.breakables };
+  }
+
+  private setPart(index: number): void {
+    this.part = index;
+    this.hb.part = index;
+    this.bb.part = index;
+  }
+
+  /**
+   * A structure explosions can bring down. Each part falls about its hinge (bridges) or the
+   * middle of its base (anything standing) once broken. Layout code inside `build` uses the
+   * kit as usual; everything it adds is tagged with the part.
+   */
+  breakable(opts: BreakOpts, specs: PartSpec[]): Breakable | null {
+    if (
+      this.breakables.length >= MAX_BREAKABLES ||
+      this.nextPart + specs.length > this.firstPart + MAX_PARTS
+    ) {
+      for (const s of specs) s.build();
+      return null;
+    }
+    const owner: Breakable = {
+      x0: 0,
+      x1: 0,
+      y0: 0,
+      y1: 0,
+      zTop: 0,
+      size: 0,
+      hp: 0,
+      maxHp: 0,
+      explosive: false,
+      parts: [],
+      brokenAt: -1,
+    };
+    const box = new Box3();
+    let o: BreakOpts = { ...opts };
+    this.owner = owner;
+    for (const spec of specs) {
+      const index = this.nextPart++;
+      this.setPart(index);
+      const from = this.hb.vertexCount;
+      o = { ...o, ...(spec.build() ?? {}) };
+      // Lights and props of a part without hull are left standing (their row never moves).
+      if (this.hb.vertexCount === from) continue;
+      const bb = this.hb.bounds(from);
+      box.union(bb);
+      const pivot = spec.pivot
+        ? new Vector3(...spec.pivot)
+        : new Vector3((bb.min.x + bb.max.x) / 2, (bb.min.y + bb.max.y) / 2, bb.min.z);
+      const height = bb.max.z - bb.min.z;
+      const span = Math.max(bb.max.x - bb.min.x, bb.max.y - bb.min.y);
+      const fall = spec.axis
+        ? { axis: new Vector3(...spec.axis).normalize(), angle: spec.angle ?? 0.7, sink: 0, duration: 0.9 }
+        : fallFor(o.fall ?? (height > span * 0.9 ? 'topple' : 'slump'), height, pivot.x, this.rng);
+      owner.parts.push({
+        index,
+        pivot,
+        center: bb.getCenter(new Vector3()).sub(pivot),
+        q: new Quaternion(),
+        drop: 0,
+        ...fall,
+      });
+    }
+    this.owner = undefined;
+    this.setPart(0);
+    if (!owner.parts.length) return null;
+    owner.x0 = box.min.x;
+    owner.x1 = box.max.x;
+    owner.y0 = box.min.y;
+    owner.y1 = box.max.y;
+    owner.zTop = box.max.z;
+    owner.size = Math.max(box.max.x - box.min.x, box.max.y - box.min.y, box.max.z - box.min.z);
+    owner.explosive = !!o.explosive;
+    owner.maxHp = owner.hp = o.hp ?? Math.min(4, Math.max(0.8, 0.6 + owner.size / 14));
+    this.breakables.push(owner);
+    return owner;
+  }
+
+  /** A moving prop (spinning dish, tracking turret) at segment-local (x, y, z). */
+  private addProp(
+    obj: Object3D,
+    x: number,
+    y: number,
+    z: number,
+    kind: Prop['kind'],
+    speed: number,
+    angle: number,
+  ): void {
+    obj.position.set(x, y, z);
+    this.group.add(obj);
+    const owner = this.owner;
+    this.props.push({
+      obj,
+      kind,
+      x,
+      y,
+      speed,
+      angle,
+      owner,
+      // Rows are handed out in order, so the part being built is owner.parts.length.
+      part: owner ? owner.parts.length : undefined,
+      rest: obj.position.clone(),
+      restQ: new Quaternion(),
+    });
   }
 
   /** The orbit biome's default content: both sides plus an occasional crossing. */
@@ -221,7 +352,12 @@ export class SegmentBuilder {
     for (let i = 0; i < 7; i++)
       this.scatter(s, r.float(56, 215), r.float(0, SEG), r.float(4, 11), r.int(8, 20));
 
-    this.farDeck((x0, x1, y0, y1, band) => this.cell(s, x0, x1, y0, y1, band, this.cellKind(band)));
+    this.farDeck((x0, x1, y0, y1, band) => {
+      const kind = this.cellKind(band);
+      this.cell(s, x0, x1, y0, y1, band, kind);
+      // Domes are tanks: they go up.
+      return { explosive: kind === 'dome' };
+    });
   }
 
   /** Pillars between the upper-wall panels, each with an accent marker. */
@@ -336,8 +472,13 @@ export class SegmentBuilder {
     }
   }
 
-  /** The far deck: a grid of cells (distance bands × two rows), each handed to `fill`. */
-  farDeck(fill: (x0: number, x1: number, y0: number, y1: number, band: number) => void): void {
+  /**
+   * The far deck: a grid of cells (distance bands × two rows), each handed to `fill`. Every
+   * cell's content is one breakable; `fill` may return options for it (explosive, how it falls).
+   */
+  farDeck(
+    fill: (x0: number, x1: number, y0: number, y1: number, band: number) => BreakOpts | undefined,
+  ): void {
     const bands: [number, number][] = [
       [66, 90],
       [94, 124],
@@ -349,7 +490,7 @@ export class SegmentBuilder {
         [2, 30],
         [34, 62],
       ] as const) {
-        fill(x0, x1, y0, y1, bi);
+        this.breakable({}, [{ build: () => fill(x0, x1, y0, y1, bi) }]);
       }
     });
   }
@@ -495,22 +636,24 @@ export class SegmentBuilder {
     _q.setFromUnitVectors(DOWN, dir);
     _m.compose(apex, _q, ONE);
     g.applyMatrix4(_m);
+    g.setAttribute(
+      'aPart',
+      new Float32BufferAttribute(new Float32Array(g.getAttribute('position').count).fill(this.part), 1),
+    );
     this.cones.push(g);
   }
 
   /** Point light fed to the dynamic light pool while the segment is on screen. */
   light(x: number, y: number, z: number, color: Color, intensity: number, distance: number): void {
-    this.lamps.push({ x, y, z, color, intensity, distance });
+    this.lamps.push({ x, y, z, color, intensity, distance, owner: this.owner });
   }
 
   /** A separately animated hull mesh (spinning dish, tracking turret…) at (x, y, z). */
   prop(b: HullBuilder, x: number, y: number, z: number, kind: 'spin' | 'turret', speed = 0): Mesh {
     const mesh = new Mesh(b.build(), this.m.hull);
-    mesh.position.set(x, y, z);
     mesh.castShadow = this.m.shadows;
     mesh.layers.enable(AO_LAYER);
-    this.group.add(mesh);
-    this.props.push({ obj: mesh, kind, x, y, speed, angle: this.rng.float(-1, 1) });
+    this.addProp(mesh, x, y, z, kind, speed, this.rng.float(-1, 1));
     return mesh;
   }
 
@@ -717,22 +860,13 @@ export class SegmentBuilder {
     b.tube([0, 0, 0], [0, 0, rad * 0.75], 0.2, 6, { layer: LAYER.PLATES, tile: 2 });
     b.box(-0.9, -0.9, -1.8, 0.9, 0.9, -0.2, { layer: LAYER.GREEBLE, tile: 3 });
     const head = new Group();
-    head.position.set(x, y, z + 3.2 + 0.9);
     const tilt = new Mesh(b.build(), this.m.hull);
     tilt.rotation.x = 0.9;
     tilt.castShadow = this.m.shadows;
     tilt.layers.enable(AO_LAYER);
     head.add(tilt);
-    this.group.add(head);
     this.bb.add(x, y, z + 3.4, 0.25, B_RED, this.rng.float(0, 6));
-    this.props.push({
-      obj: head,
-      kind: 'spin',
-      x,
-      y,
-      speed: this.rng.float(0.25, 0.7) * this.rng.sign(),
-      angle: 0,
-    });
+    this.addProp(head, x, y, z + 3.2 + 0.9, 'spin', this.rng.float(0.25, 0.7) * this.rng.sign(), 0);
   }
 
   turret(x: number, y: number): void {
@@ -768,11 +902,40 @@ export class SegmentBuilder {
     }
     const head = new Mesh(b.build(), this.m.hull);
     head.layers.enable(AO_LAYER);
-    head.position.set(x, y, z + 1.6);
     head.castShadow = this.m.shadows;
-    this.group.add(head);
     this.bb.add(x, y - 2, z + 5.4, 0.3, B_RED, this.rng.float(0, 6));
-    this.props.push({ obj: head, kind: 'turret', x, y, speed: 0, angle: this.rng.float(-1, 1) });
+    this.addProp(head, x, y, z + 1.6, 'turret', 0, this.rng.float(-1, 1));
+  }
+
+  /**
+   * A span across the trench (x0 → x1) that breaks somewhere near the middle, each half
+   * hinging down from its anchored end. `half` builds the piece between xa and xb; `torn`
+   * names its broken face.
+   */
+  crossing(
+    x0: number,
+    x1: number,
+    y: number,
+    z: number,
+    opts: BreakOpts,
+    half: (xa: number, xb: number, torn: 'px' | 'nx') => void,
+  ): void {
+    const r = this.rng;
+    const split = r.float(x0 * 0.3, x1 * 0.3);
+    this.breakable(opts, [
+      {
+        pivot: [x0, y, z],
+        axis: [0, 1, 0],
+        angle: r.float(0.5, 0.85),
+        build: () => void half(x0, split, 'px'),
+      },
+      {
+        pivot: [x1, y, z],
+        axis: [0, -1, 0],
+        angle: r.float(0.5, 0.85),
+        build: () => void half(split, x1, 'nx'),
+      },
+    ]);
   }
 
   bridge(): void {
@@ -783,49 +946,33 @@ export class SegmentBuilder {
     const z1 = T.hullZ - 0.4;
     const z0 = z1 - r.float(2.5, 3.8);
     const side: Surf = { layer: LAYER.WINDOWS, tile: 10, emit: 1.2, phase: r.next() };
-    this.hb.box(
-      -T.lipX - 1,
-      yb - w / 2,
-      z0,
-      T.lipX + 1,
-      yb + w / 2,
-      z1,
-      { layer: LAYER.DECK, tile: 16 },
-      {
-        py: side,
-        ny: side,
-        nz: { layer: LAYER.PLATES, tile: 16, shade: 0.6 },
-        px: null,
-        nx: null,
-      },
-    );
-    for (const e of [-1, 1]) {
-      const ya = yb + e * (w / 2 - 1);
+    const torn: Surf = { layer: LAYER.GREEBLE, tile: 6 };
+    const phases = [r.next(), r.next()];
+    this.crossing(-T.lipX - 1, T.lipX + 1, yb, z1, { hp: 2.5 }, (xa, xb, face) => {
+      const open = face === 'px' ? { px: torn } : { nx: torn };
       this.hb.box(
-        -T.lipX,
-        ya - 0.6,
-        z0 - 2.4,
-        T.lipX,
-        ya + 0.6,
+        xa,
+        yb - w / 2,
         z0,
-        { layer: LAYER.GREEBLE, tile: 8 },
-        {
-          px: null,
-          nx: null,
-        },
-      );
-      this.bb.bar(
-        -T.lipX,
-        yb + e * (w / 2 - 0.35) - 0.15,
+        xb,
+        yb + w / 2,
         z1,
-        T.lipX,
-        yb + e * (w / 2 - 0.35) + 0.15,
-        z1 + 0.22,
-        B_FLOW,
+        { layer: LAYER.DECK, tile: 16 },
+        { py: side, ny: side, nz: { layer: LAYER.PLATES, tile: 16, shade: 0.6 }, ...open },
       );
-      for (let x = -T.lipX + 6; x < T.lipX; x += 12)
-        this.bb.add(x, yb + e * (w / 2), z0 - 0.3, 0.3, B_ACCENT, x * 0.1);
-    }
+      const ga = Math.max(xa, -T.lipX);
+      const gb = Math.min(xb, T.lipX);
+      [-1, 1].forEach((e, k) => {
+        const ya = yb + e * (w / 2 - 1);
+        this.hb.box(ga, ya - 0.6, z0 - 2.4, gb, ya + 0.6, z0, { layer: LAYER.GREEBLE, tile: 8 }, open);
+        const yl = yb + e * (w / 2 - 0.35);
+        this.bb.bar(ga, yl - 0.15, z1, gb, yl + 0.15, z1 + 0.22, B_FLOW);
+        for (let x = -T.lipX + 6; x < T.lipX; x += 12) {
+          if (x >= xa && x < xb)
+            this.bb.add(x, yb + e * (w / 2), z0 - 0.3, 0.3, B_ACCENT, x * 0.1 + phases[k]!);
+        }
+      });
+    });
     // Brackets into the upper walls (kept above the maglev's clearance).
     for (const s of [-1, 1] as const) {
       this.sbox(
@@ -850,14 +997,15 @@ export class SegmentBuilder {
     const y = r.float(12, SEG - 12);
     const z = r.float(-30, -24);
     const rad = r.float(1.4, 2.2);
-    this.hb.tube([-T.terraceIn - 2, y, z], [T.terraceIn + 2, y, z], rad, 16, {
-      layer: LAYER.PLATES,
-      tile: 6,
+    const blink = r.float(0, 6);
+    this.crossing(-T.terraceIn - 2, T.terraceIn + 2, y, z, { hp: 1.5, explosive: true }, (xa, xb) => {
+      this.hb.tube([xa, y, z], [xb, y, z], rad, 16, { layer: LAYER.PLATES, tile: 6 });
+      for (let x = -T.terraceIn + 4; x < T.terraceIn; x += 10) {
+        if (x >= xa && x + 1.4 <= xb)
+          this.hb.tube([x, y, z], [x + 1.4, y, z], rad + 0.3, 16, { layer: LAYER.HAZARD, tile: 4 });
+      }
+      if (xa <= 0 && xb > 0) this.bb.add(0, y, z + rad + 0.4, 0.35, B_RED, blink);
     });
-    for (let x = -T.terraceIn + 4; x < T.terraceIn; x += 10) {
-      this.hb.tube([x, y, z], [x + 1.4, y, z], rad + 0.3, 16, { layer: LAYER.HAZARD, tile: 4 });
-    }
-    this.bb.add(0, y, z + rad + 0.4, 0.35, B_RED, r.float(0, 6));
   }
 }
 

@@ -157,8 +157,12 @@ function belt(b: SegmentBuilder, rock: RockNoise, conveyorX: number): void {
             r.float(0.5, 0.8),
           );
         }
+        return { hp: Number.POSITIVE_INFINITY };
       } else if (kind === 'flood') floodlight(b, s, cx, cy, gz);
-      else if (kind === 'drill') drillRig(b, s, cx, cy, gz);
+      else if (kind === 'drill') {
+        drillRig(b, s, cx, cy, gz);
+        return { explosive: true };
+      }
     });
   }
   if (r.chance(0.4)) conveyorBridge(b, gz);
@@ -380,18 +384,21 @@ function conveyorBridge(b: SegmentBuilder, gz: (x: number, y: number) => number)
   const r = b.rng;
   const y = r.float(12, SEG - 12);
   const z = -7.5;
-  b.hb.truss([-50, y, z], [50, y, z], 2.6, { layer: LAYER.RIBS, tile: 2 });
-  b.hb.box(
-    -51,
-    y - 1.3,
-    z + 1.3,
-    51,
-    y + 1.3,
-    z + 1.9,
-    { layer: LAYER.PLATES, tile: 6 },
-    { nz: null, pz: { layer: LAYER.GRILLE, tile: 2.6 } },
-  );
-  for (let x = -42; x <= 42; x += 12) b.bb.add(x, y, z - 1.6, 0.26, B_ACCENT, x * 0.1);
+  b.crossing(-51, 51, y, z + 1.9, { hp: 2 }, (xa, xb, torn) => {
+    b.hb.truss([Math.max(xa, -50), y, z], [Math.min(xb, 50), y, z], 2.6, { layer: LAYER.RIBS, tile: 2 });
+    b.hb.box(
+      xa,
+      y - 1.3,
+      z + 1.3,
+      xb,
+      y + 1.3,
+      z + 1.9,
+      { layer: LAYER.PLATES, tile: 6 },
+      { nz: null, pz: { layer: LAYER.GRILLE, tile: 2.6 }, [torn]: { layer: LAYER.GREEBLE, tile: 4 } },
+    );
+    for (let x = -42; x <= 42; x += 12)
+      if (x >= xa && x < xb) b.bb.add(x, y, z - 1.6, 0.26, B_ACCENT, x * 0.1);
+  });
   for (const s of [-1, 1] as const) {
     b.sbox(
       s,
@@ -449,8 +456,10 @@ function nebula(b: SegmentBuilder): void {
       );
       if (kind === 'scaffold') scaffold(b, s, x0, x1, y0, y1);
       else if (kind === 'crane') crane(b, s, (x0 + x1) / 2, (y0 + y1) / 2);
-      else if (kind === 'module') hullModule(b, s, x0, x1, y0, y1);
-      else if (kind === 'tower' || kind === 'pad') b.cell(s, x0, x1, y0, y1, band, kind);
+      else if (kind === 'module') {
+        hullModule(b, s, x0, x1, y0, y1);
+        return { explosive: true };
+      } else if (kind === 'tower' || kind === 'pad') b.cell(s, x0, x1, y0, y1, band, kind);
     });
   }
   const roll = r.next();
@@ -690,7 +699,6 @@ function gantry(b: SegmentBuilder): void {
   const r = b.rng;
   const y = r.float(10, SEG - 10);
   const z = -8.5;
-  b.hb.truss([-44, y, z], [44, y, z], 2.4, { layer: LAYER.RIBS, tile: 2 });
   for (const s of [-1, 1] as const) {
     b.sbox(
       s,
@@ -706,10 +714,16 @@ function gantry(b: SegmentBuilder): void {
     b.bb.add(s * 40.4, y, z + 1.6, 0.3, B_RED, r.float(0, 6));
   }
   const tx = r.float(-26, 26);
-  b.hb.box(tx - 2.2, y - 1.8, z - 2.6, tx + 2.2, y + 1.8, z - 1.2, { layer: LAYER.PANELS, tile: 4 });
-  b.bb.add(tx, y, z - 2.8, 0.42, B_LAMP, 0);
-  b.cone(new Vector3(tx, y, z - 2.9), new Vector3(tx, y, -34), 0.2);
-  for (let x = -36; x <= 36; x += 12) b.bb.add(x, y - 1.35, z, 0.22, B_ACCENT, x * 0.1);
+  b.crossing(-44, 44, y, z + 1.2, { hp: 2 }, (xa, xb) => {
+    b.hb.truss([xa, y, z], [xb, y, z], 2.4, { layer: LAYER.RIBS, tile: 2 });
+    if (tx >= xa && tx < xb) {
+      b.hb.box(tx - 2.2, y - 1.8, z - 2.6, tx + 2.2, y + 1.8, z - 1.2, { layer: LAYER.PANELS, tile: 4 });
+      b.bb.add(tx, y, z - 2.8, 0.42, B_LAMP, 0);
+      b.cone(new Vector3(tx, y, z - 2.9), new Vector3(tx, y, -34), 0.2);
+    }
+    for (let x = -36; x <= 36; x += 12)
+      if (x >= xa && x < xb) b.bb.add(x, y - 1.35, z, 0.22, B_ACCENT, x * 0.1);
+  });
 }
 
 // ── The core: a reactor canyon over a lava river ──────────────────────────────
@@ -764,10 +778,18 @@ function core(b: SegmentBuilder, rock: RockNoise): void {
       );
       const cx = (x0 + x1) / 2;
       const cy = (y0 + y1) / 2;
-      if (kind === 'cooling') coolingTower(b, s, cx, cy, Math.min(x1 - x0, y1 - y0) / 2 - 1);
-      else if (kind === 'exchanger') exchanger(b, s, x0, x1, y0, y1);
-      else if (kind === 'reactor') reactor(b, s, cx, cy, Math.min(x1 - x0, y1 - y0) * 0.3);
-      else if (kind === 'pylon') b.mast(s * cx, cy, T.hullZ, r.float(14, 26));
+      if (kind === 'cooling') {
+        coolingTower(b, s, cx, cy, Math.min(x1 - x0, y1 - y0) / 2 - 1);
+        return { fall: 'sink', hp: 5 };
+      }
+      if (kind === 'exchanger') {
+        exchanger(b, s, x0, x1, y0, y1);
+        return { explosive: true };
+      }
+      if (kind === 'reactor') {
+        reactor(b, s, cx, cy, Math.min(x1 - x0, y1 - y0) * 0.3);
+        return { explosive: true, hp: 3 };
+      } else if (kind === 'pylon') b.mast(s * cx, cy, T.hullZ, r.float(14, 26));
       else if (kind === 'radiator' || kind === 'tower') b.cell(s, x0, x1, y0, y1, band, kind);
     });
   }
