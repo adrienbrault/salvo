@@ -22,6 +22,16 @@ Hidden windows are also throttled (timers, and the whole process when macOS naps
 
 Frame rate in a hidden window is unreliable, but GPU timestamps are not. On WebGPU, `salvo.gr.renderer.backend.trackTimestamp = true`, then after each of a few frames `await salvo.gr.renderer.resolveTimestampsAsync('render')` returns that frame's GPU milliseconds. Resolve one at a time (overlapping resolves hang the query pool), run long experiments as an in-page async task that writes results to `window` and poll it, and compare by toggling one thing at a time (`gr.key.castShadow`, `gr.sea.reflective`, `gr.trench.root.visible`, `renderer.setPixelRatio`).
 
+## Safari (WebKit)
+
+Chrome passing says little about Safari (and so iOS): it has no `scheduler.yield()`, and three then falls back to animation frames. Playwright's WebKit build runs headless with WebGPU and WebGL2 and needs no automation settings. Install it outside the repo:
+
+1. In a scratch directory: `bun add playwright`, then `PLAYWRIGHT_BROWSERS_PATH=<dir>/browsers ./node_modules/.bin/playwright install webkit` (outside the sandbox: its download host drops proxied connections).
+2. A script with `webkit.launch()` and `newPage({ viewport, deviceScaleFactor: 2 })`, or `devices['iPhone 15 Pro']` for a phone viewport. Poll `window.salvo`, read `salvo.gr` in `page.evaluate`, `page.screenshot`.
+3. To test a local build, serve `dist/` on an ordinary port: WebKit refuses the blocked-ports list (4190 among them) and the navigation just times out.
+
+It is macOS WebKit at a phone's size, not iOS: memory, GPU and thermals still need a real device (see Phones).
+
 ## The `salvo` debug handle
 
 `window.salvo = { game, gr, ui }` (set in `src/main.tsx`):
