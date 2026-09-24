@@ -22,6 +22,10 @@ Hidden windows are also throttled (timers, and the whole process when macOS naps
 
 Frame rate in a hidden window is unreliable, but GPU timestamps are not. On WebGPU, `salvo.gr.renderer.backend.trackTimestamp = true`, then after each of a few frames `await salvo.gr.renderer.resolveTimestampsAsync('render')` returns that frame's GPU milliseconds. Resolve one at a time (overlapping resolves hang the query pool), run long experiments as an in-page async task that writes results to `window` and poll it, and compare by toggling one thing at a time (`gr.key.castShadow`, `gr.sea.reflective`, `gr.trench.root.visible`, `renderer.setPixelRatio`).
 
+## Hitches
+
+A frame that stalls for hundreds of milliseconds is almost always a pipeline built mid-game. Count them: in a Playwright init script, wrap `GPUDevice.prototype.createRenderPipeline` and `createComputePipeline` (and their `Async` variants), perform the suspect action (a resize, `gr.setTheme`, `game.startLevel`) and let a few frames pass: after boot the count stays at zero. To see what changed, wrap `createShaderModule` too and diff the new WGSL against the earlier modules. CDP's `Emulation.setCPUThrottlingRate` (4×) stands in for a slow device.
+
 ## Safari (WebKit)
 
 Chrome passing says little about Safari (and so iOS): it has no `scheduler.yield()`, and three then falls back to animation frames. Playwright's WebKit build runs headless with WebGPU and WebGL2 and needs no automation settings. Install it outside the repo:
