@@ -1,13 +1,46 @@
-@import "@fontsource/chakra-petch/400.css";
-@import "@fontsource/chakra-petch/600.css";
-@import "@fontsource/chakra-petch/700.css";
-@import "@fontsource/rajdhani/500.css";
-@import "@fontsource/rajdhani/700.css";
 @import "./popups.css";
 @import "./hud.css";
 @import "./cards.css";
 @import "./screens.css";
 @import "./shop.css";
+
+/* The UI fonts, Latin only and woff2 only: the bundle inlines them into the CSS, and the full
+   fontsource imports (every subset, each as woff and woff2) added 500 kB to the first load. */
+@font-face {
+  font-family: "Chakra Petch";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("@fontsource/chakra-petch/files/chakra-petch-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Chakra Petch";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url("@fontsource/chakra-petch/files/chakra-petch-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Chakra Petch";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url("@fontsource/chakra-petch/files/chakra-petch-latin-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Rajdhani";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("@fontsource/rajdhani/files/rajdhani-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Rajdhani";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url("@fontsource/rajdhani/files/rajdhani-latin-700-normal.woff2") format("woff2");
+}
 
 :root {
   color-scheme: dark;
