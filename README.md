@@ -23,3 +23,7 @@ bun run preview  # serve dist/
 ```
 
 URL flags for testing (`?webgl`, `?tier=low`, `?fps`, …) are listed in [docs/browser-testing.md](docs/browser-testing.md). Design, balancing and rendering notes live in [docs/](docs/); [AGENTS.md](AGENTS.md) is the guide for coding agents.
+
+## License
+
+[MIT](LICENSE)

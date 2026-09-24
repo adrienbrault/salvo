@@ -2,6 +2,7 @@
   "name": "salvo",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "Salvo — shoot'em up roguelike à la Balatro (Bun + Three.js WebGPU)",
   "scripts": {
