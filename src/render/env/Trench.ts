@@ -14,6 +14,7 @@ import {
   normalLocal,
   normalMap,
   normalView,
+  normalWorldGeometry,
   parallaxDirection,
   positionLocal,
   positionViewDirection,
@@ -160,6 +161,8 @@ export interface TrenchOptions {
   shadows: boolean;
   /** Parallax offset mapping on the hull (one extra dependent texture read). */
   parallax: boolean;
+  /** (char, heat) of blast scorch at a world position (the sea simulation's, see Sea.scorchAt). */
+  scorch?: (xy: Node<'vec2'>) => Node<'vec2'>;
 }
 
 /** How long a broken structure burns (and its metal glows). */
@@ -311,7 +314,16 @@ export class Trench {
     // Broken structures are charred; freshly broken metal glows with heat.
     const broken = part.state.x.toVertexStage();
     const glow = part.state.y.toVertexStage();
-    const char = float(1).sub(broken.mul(0.72));
+    // Scorch from blasts overhead, on surfaces facing up near the battle (magma shrugs it off).
+    const magma = step(LAYER.MAGMA - 0.5, layer).mul(step(layer, LAYER.MAGMA + 0.5));
+    const burnt = this.opts.scorch?.(positionWorld.xy) ?? vec2(0, 0);
+    const exposed = smoothstep(0.3, 0.8, normalWorldGeometry.z)
+      .mul(smoothstep(-46, -22, positionWorld.z))
+      .mul(float(1).sub(magma));
+    const scorched = burnt.x.mul(exposed);
+    const char = float(1)
+      .sub(broken.mul(0.72))
+      .mul(float(1).sub(scorched.mul(0.8)));
     // Light pools along the trench; the deck far from it sinks into the night.
     const falloff = mix(float(0.3), float(1), smoothstep(230, 60, abs(positionWorld.x)));
     // Macro variation at a frequency unrelated to the tiles hides repetition (UVs are
@@ -332,6 +344,7 @@ export class Trench {
       .add(grime.mul(0.3))
       .add(micro.sub(0.5).mul(0.16))
       .add(broken.mul(0.35))
+      .add(scorched.mul(0.3))
       .clamp(0.04, 1);
     mat.metalnessNode = orm.b;
     mat.normalNode = normalMap(nrm);
@@ -341,7 +354,6 @@ export class Trench {
     const cell = floor(st.mul(vec2(10, 4)));
     const cellHash = hash(cell.x.add(cell.y.mul(57.31)).add(info.w.mul(131.7)));
     // Magma never switches off: it throbs instead.
-    const magma = step(LAYER.MAGMA - 0.5, layer).mul(step(layer, LAYER.MAGMA + 0.5));
     const lit = max(step(0.12, fract(time.mul(0.035).add(cellHash))), magma);
     const heat = magma
       .mul(
@@ -366,16 +378,20 @@ export class Trench {
       ring = ring.add(smoothstep(6, 0, d.sub(s.z).abs()).mul(s.w));
     }
     const wave = accentCol.mul(ring.mul(em.g.mul(4).add(em.r.mul(2)).add(0.35)));
-    // Glowing seams and patches on hot wreckage, cooling from orange to nothing.
+    // Glowing seams and patches on hot wreckage and fresh scorch, cooling from orange to nothing.
     const grain = texture(tex.macro, st0.mul(0.9));
-    const embers = vec3(1, 0.3, 0.05)
-      .mul(glow.mul(glow).mul(glow).mul(2.6))
-      .mul(
-        smoothstep(0.62, 0.9, grain.b.mul(0.7).add(macro.b.mul(0.3))).add(
-          smoothstep(0.35, 0.1, height).mul(0.3),
-        ),
-      );
-    mat.emissiveNode = warm.add(accent).add(red).mul(info.y).mul(float(1).sub(broken)).add(wave).add(embers);
+    const speckle = smoothstep(0.62, 0.9, grain.b.mul(0.7).add(macro.b.mul(0.3)));
+    const hot = glow.mul(glow).mul(glow).mul(2.6);
+    const seared = burnt.y.mul(exposed);
+    const embers = vec3(1, 0.3, 0.05).mul(
+      hot
+        .mul(speckle.add(smoothstep(0.35, 0.1, height).mul(0.3)))
+        .add(seared.mul(seared).mul(speckle.mul(2.5).add(0.25))),
+    );
+    const powered = float(1)
+      .sub(broken)
+      .mul(float(1).sub(scorched.mul(0.7)));
+    mat.emissiveNode = warm.add(accent).add(red).mul(info.y).mul(powered).add(wave).add(embers);
     return mat;
   }
 

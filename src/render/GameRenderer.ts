@@ -132,6 +132,7 @@ export class GameRenderer {
       lamps: quality.envLamps,
       shadows: quality.shadows,
       parallax: quality.tier === 'ultra' || quality.tier === 'high',
+      scorch: (xy) => this.sea.scorchAt(xy),
     });
     this.enemies = new EnemyLayer(scene);
     this.bullets = new BulletLayer(3000);

@@ -113,6 +113,7 @@ export class FxDirector {
           this.particles.shock(e.x, e.y, 60 + s * 12);
           this.rig.addTrauma(Math.min(0.35, 0.05 + s * 0.02));
           this.trench.damage(e.x, e.y, 6 + s * 2.5, 0.4 + s * 0.15);
+          this.sea.scorch(e.x, e.y, 2.5 + s * 0.9, Math.min(1, 0.3 + s * 0.08));
           if (big) {
             this.screenShock(e.x, e.y, 0.35, 0.03);
             this.bloomKick = Math.max(this.bloomKick, 0.5);
@@ -142,6 +143,7 @@ export class FxDirector {
             this.trench.shockwave(e.x, e.y, 3);
             // The boss takes the neighbourhood with it, all the way out across the deck.
             this.trench.damage(e.x, e.y, 150, 6);
+            this.sea.scorch(e.x, e.y, 18, 1.2);
           }
           break;
         }
@@ -228,6 +230,7 @@ export class FxDirector {
           this.screenShock(e.x, e.y, 1, 0.08, 1.4);
           this.sea.drop(e.x, e.y, 26, 3);
           this.trench.damage(e.x, e.y, 60, 4);
+          this.sea.scorch(e.x, e.y, 10, 1);
           break;
         case 'graze':
           this.particles.emit({
@@ -454,6 +457,12 @@ export class FxDirector {
       (2500 + s * 300) * (blast ? 3 : 1),
       30 + s * 2,
       blast ? 0.7 : 0.45,
+    );
+    this.sea.scorch(
+      w.x,
+      w.y,
+      w.kind === 'blast' ? 6 + s * 0.3 : w.kind === 'car' ? 4 : 3 + s * 0.1,
+      blast ? 1 : 0.7,
     );
     this.trench.shockwave(
       w.x,
