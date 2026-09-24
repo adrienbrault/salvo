@@ -97,6 +97,16 @@ export class Post {
       aoPass.radius.value = 2.2;
       aoPass.thickness.value = 2;
       aoPass.scale.value = 1.15;
+      // three's GTAONode rebuilds its material in setup(), which runs again for every material
+      // built with this context (every lit material): once is enough. Otherwise each material
+      // compiled behind the title screen rebuilds the AO pipeline on the next frame.
+      const setupAO = aoPass.setup.bind(aoPass);
+      let aoBuilt = false;
+      aoPass.setup = (builder) => {
+        if (aoBuilt) return aoPass.getTextureNode();
+        aoBuilt = true;
+        return setupAO(builder);
+      };
       scenePass.contextNode = builtinAOContext(aoPass.getTextureNode().sample(screenUV).r);
     }
     const color = scenePass.getTextureNode('output');
