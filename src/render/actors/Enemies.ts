@@ -160,7 +160,9 @@ export class EnemyLayer {
       _s.setScalar(scale);
       _m.compose(_p, _q, _s);
       view.mesh.setMatrixAt(i, _m);
-      view.flash.setX(i, e.flash > 0 ? 1 : e.kind === 'diver' && e.state === 1 ? 0.35 : 0);
+      // A diver about to dive pulses at full flash: the warning must outshine a hit.
+      const telegraph = e.kind === 'diver' && e.state === 1 ? 0.55 + 0.45 * Math.sin(t * 38) : 0;
+      view.flash.setX(i, e.flash > 0 ? 1 : telegraph);
     }
     for (const [kind, view] of this.views) {
       view.mesh.count = counts.get(kind)!;
