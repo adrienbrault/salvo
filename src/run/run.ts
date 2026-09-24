@@ -1,4 +1,5 @@
 import { getChassis } from '../content/chassis';
+import { getItem } from '../content/registry';
 import { CONSTRAINT_IDS, CONSTRAINTS, type ConstraintId } from '../sim/constraints';
 import { Rng } from '../sim/rng';
 import { computeEconomy, computeStats } from '../sim/stats';
@@ -30,9 +31,9 @@ export function createRun(seed: string, chassisId: string): RunState {
     money: START_MONEY,
     hp: 0,
     loadout: {
-      weapon: newInstance(uid, ch.weapon, 7),
-      engine: newInstance(uid, ch.engine, 5),
-      core: newInstance(uid, ch.core, 6),
+      weapon: newInstance(uid, ch.weapon, getItem(ch.weapon).price),
+      engine: newInstance(uid, ch.engine, getItem(ch.engine).price),
+      core: newInstance(uid, ch.core, getItem(ch.core).price),
       relics: [],
     },
     calibrations: { tir: 0, impact: 0, renvoi: 0, onde: 0, reaction: 0 },

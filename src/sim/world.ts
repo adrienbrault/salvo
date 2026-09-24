@@ -1,5 +1,6 @@
 import { getItem, resolveRelicDef } from '../content/registry';
 import type { HookCtx, ItemDef, ItemInstance, LevelEndInfo } from '../content/types';
+import { CALIBRATION_BONUS } from '../content/upgrades';
 import type { RunState } from '../run/state';
 import {
   DEATH_OUTRO,
@@ -855,7 +856,11 @@ export class World {
       duringDash: p.dashT > 0,
       killIndex: this.tally.kills,
     };
-    const calc: ScoreCalc = { base: e.value + lvl * 15, mult: this.gauge + lvl, repeats: 1 };
+    const calc: ScoreCalc = {
+      base: e.value + lvl * CALIBRATION_BONUS.base,
+      mult: this.gauge + lvl * CALIBRATION_BONUS.mult,
+      repeats: 1,
+    };
     for (const h of this.hooks) h.def.onKill?.(h.ctx, info, calc);
     const total = Math.max(0, Math.round(calc.base * calc.mult)) * calc.repeats;
     this.score += total;
