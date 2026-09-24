@@ -51,7 +51,7 @@ export interface Bullet {
   killType: KillType;
   grazed: boolean;
   lastHitId: number;
-  /** Set when the player's Mirror reflected it, or boss mirror constraint — for visuals. */
+  /** Set when the player's Mirror reflected it — for visuals. */
   reflected: boolean;
 }
 
@@ -85,7 +85,7 @@ export interface Enemy {
   fireT: number;
   state: number;
   stateT: number;
-  /** Last dash id / wave id that damaged this enemy (hit-once semantics). */
+  /** Last dash id that damaged this enemy (hit-once per dash). */
   dashHit: number;
   dead: boolean;
 }

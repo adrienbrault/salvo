@@ -30,7 +30,7 @@ export const PLAYER_SPAWN = { x: 0, y: -FIELD.halfH + 26 } as const;
 export const LEVEL_INTRO = 1.6;
 /** Seconds of victory outro (screen clear) before the level ends. */
 export const LEVEL_OUTRO = 1.8;
-/** Seconds of death sequence before the run ends. */
+/** Seconds of outro after a lost level (death or time-out) before the run ends. */
 export const DEATH_OUTRO = 2.2;
 
 /** Invulnerability after taking a hit. */

@@ -111,7 +111,7 @@ export class Game {
     ui.tally.value = { ...w.tally, triggers: [...w.tally.triggers] };
     this.records.bestLevelScore = Math.max(this.records.bestLevelScore, w.score);
     this.records.bestKill = Math.max(this.records.bestKill, w.tally.bestKill);
-    this.records.bestSector = Math.max(this.records.bestSector, run.sector + (report.won ? 0 : 0));
+    this.records.bestSector = Math.max(this.records.bestSector, run.sector);
     if (report.outcome === 'runLost') {
       clearRun(this.store);
       ui.hasSave.value = false;

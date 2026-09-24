@@ -175,7 +175,7 @@ export class World {
   input: InputFrame = emptyInput();
   actionPressed = false;
   actionReleased = false;
-  /** Enemy & enemy-bullet time scale (Chronostase). */
+  /** Enemy & enemy-bullet time scale (Chronostasis). */
   enemyTimeScale = 1;
   slowT = 0;
   muzzleFlip = false;
@@ -233,7 +233,7 @@ export class World {
       disabled: false,
     };
 
-    // Level-start hooks may mutate the loadout (Dague rituelle), so stats/hooks are built after.
+    // Level-start hooks may mutate the loadout (Ritual Dagger), so stats/hooks are built after.
     this.stats = computeStats(run);
     this.weapon = this.resolveWeapon();
     this.rebuildHooks();

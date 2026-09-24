@@ -29,7 +29,7 @@ export const BASE_ECONOMY: Readonly<EconomyStats> = {
 export const MODULE_EFFECT = { damage: 0.2, rate: 0.15, hull: 1 } as const;
 
 /**
- * Stats = base → engine → core → modules → relics (left → right, Blueprint copies the next relic).
+ * Stats = base → weapon → engine → core → modules → relics (left → right, Blueprint copies the next relic).
  * Order matters for relics that set values (Glass Heart sets max HP to 1 after everything else).
  */
 export function computeStats(run: RunState): PlayerStats {

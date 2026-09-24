@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { getItem } from '../content/registry';
 import { freshRun, playLevel } from '../test/bot';
 import { applyLevelResult, computeReward, createRun } from './run';
 import { buy, canBuy, moveRelic, reroll, rerollCost, sellRelic } from './shop';
@@ -50,8 +49,8 @@ describe('shop', () => {
 
   test('buying a relic fills a slot and costs money', () => {
     const run = shopRun();
-    const idx = run.shop!.offers.findIndex((o) => o.id && getItem(o.id).kind === 'relic');
-    if (idx < 0) return;
+    const idx = 0;
+    run.shop!.offers[idx] = { id: 'mult_flat', price: 4 };
     const price = run.shop!.offers[idx]!.price;
     expect(buy(run, 'offers', idx).ok).toBe(true);
     expect(run.loadout.relics.length).toBe(1);
