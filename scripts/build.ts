@@ -17,6 +17,10 @@ if (!result.success) {
   process.exit(1);
 }
 
+// Response headers for Cloudflare's static assets (wrangler.jsonc): a chunk's name carries its
+// content hash, so browsers keep it for good instead of revalidating it on every visit.
+await Bun.write('./dist/_headers', '/chunk-*\n  Cache-Control: public, max-age=31536000, immutable\n');
+
 let total = 0;
 for (const out of result.outputs) {
   total += out.size;
