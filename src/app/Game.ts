@@ -8,7 +8,6 @@ import { applyLevelResult, continueEndless, createRun, currentSpec, levelRng } f
 import { moveRelic, buy as shopBuy, reroll as shopReroll, sellRelic as shopSell } from '../run/shop';
 import type { RunState } from '../run/state';
 import { DT } from '../sim/constants';
-import { CONSTRAINTS } from '../sim/constraints';
 import { randomSeed } from '../sim/rng';
 import type { FxEvent } from '../sim/types';
 import { World } from '../sim/world';
@@ -60,13 +59,17 @@ export class Game {
 
   // ── Run flow ──────────────────────────────────────────────────────────────
 
+  chooseChassis(): void {
+    this.go('chassis');
+  }
+
   newRun(chassisId: string, seed = randomSeed()): void {
     this.run = createRun(seed, chassisId);
     this.records.runs++;
     saveRecords(this.store, this.records);
     this.publishRun();
     this.gr.setChassis(getChassis(chassisId));
-    this.gr.setTheme(0);
+    this.gr.setTheme(this.run.sector, this.run.seed);
     this.go('map');
   }
 
@@ -76,7 +79,7 @@ export class Game {
     this.run = run;
     this.publishRun();
     this.gr.setChassis(getChassis(run.chassis));
-    this.gr.setTheme(run.sector);
+    this.gr.setTheme(run.sector, run.seed);
     this.go(run.shop ? 'shop' : 'map');
     return true;
   }
@@ -90,7 +93,7 @@ export class Game {
     this.hitStop = 0;
     this.popups.clear();
     this.gr.setChassis(getChassis(run.chassis));
-    this.gr.setTheme(run.sector);
+    this.gr.setTheme(run.sector, run.seed);
     ui.paused.value = false;
     ui.relicPulse.value = [0, 0, 0, 0, 0];
     this.publishRun();
@@ -122,6 +125,8 @@ export class Game {
     }
     saveRecords(this.store, this.records);
     this.publishRun();
+    // A new sector gets a new trench: rebuild it behind the recap, not when the next level starts.
+    if (report.sectorCleared) this.gr.setTheme(run.sector, run.seed);
     this.go('recap');
   }
 
@@ -187,18 +192,18 @@ export class Game {
       this.audio?.play('error');
       const msg =
         res.error === 'money'
-          ? 'Pas assez d’argent'
+          ? 'Not enough money'
           : res.error === 'slots'
-            ? 'Emplacements de reliques pleins — vends-en une'
+            ? 'Relic slots full — sell one first'
             : res.error === 'full-hp'
-              ? 'Coque déjà intacte'
-              : 'Déjà vendu';
+              ? 'Hull already intact'
+              : 'Already sold';
       toast(msg);
       return;
     }
     this.audio?.play('buy');
     if (res.replaced && offer) {
-      toast(`${getItem(res.replaced.id).name} remplacé (+$${res.refund})`);
+      toast(`${getItem(res.replaced.id).name} replaced (+$${res.refund})`);
       this.gr.setChassis(getChassis(run.chassis));
     }
     saveRun(this.store, run);
@@ -212,7 +217,7 @@ export class Game {
       saveRun(this.store, this.run);
     } else {
       this.audio?.play('error');
-      toast('Pas assez d’argent');
+      toast('Not enough money');
     }
     this.publishRun();
   }
@@ -289,7 +294,7 @@ export class Game {
       } else if (e.t === 'playerHit' && ui.settings.value.vibration) {
         navigator.vibrate?.(60);
       } else if (e.t === 'blackout' && e.on) {
-        toast('Silence radio !');
+        toast('Radio Silence!');
       }
     }
     if (pulses) ui.relicPulse.value = pulses;
@@ -330,7 +335,7 @@ export class Game {
       maxCharges: p.maxCharges,
       stored: p.stored,
       blackout: p.disabled,
-      constraint: w.constraint ? CONSTRAINTS[w.constraint.id].name : null,
+      constraint: w.constraint?.id ?? null,
     };
     ui.hud.value = hud;
   }

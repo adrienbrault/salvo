@@ -3,22 +3,47 @@
 @import "@fontsource/chakra-petch/700.css";
 @import "@fontsource/rajdhani/500.css";
 @import "@fontsource/rajdhani/700.css";
+@import "./popups.css";
+@import "./hud.css";
+@import "./cards.css";
+@import "./screens.css";
+@import "./shop.css";
 
 :root {
   color-scheme: dark;
   --bg: #05060d;
   --ink: #eef2ff;
   --muted: #8a93b8;
+  --dim: #4f5779;
+  /* Score formula: blue Shards × red Mult. */
   --blue: #4dabff;
   --red: #ff4d6d;
   --gold: #ffd23f;
   --cyan: #4de8ff;
+  --green: #6cf0c2;
+  --violet: #c77dff;
   --panel: rgba(12, 16, 32, 0.72);
+  --panel-solid: rgba(9, 12, 26, 0.9);
   --line: rgba(140, 170, 255, 0.18);
+  --line-hi: rgba(140, 170, 255, 0.42);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
   --font-ui: "Chakra Petch", "Rajdhani", system-ui, sans-serif;
   --font-num: "Rajdhani", "Chakra Petch", system-ui, sans-serif;
+  /* Hull-plate chamfer shared by panels, buttons and cards. */
+  --cut: 10px;
+  --chamfer: polygon(
+    var(--cut) 0,
+    100% 0,
+    100% calc(100% - var(--cut)),
+    calc(100% - var(--cut)) 100%,
+    0 100%,
+    0 var(--cut)
+  );
+  --pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 * {
@@ -59,16 +84,287 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  overflow: hidden;
 }
 
-.dev-hud {
+/* Above the kill popups (z-index 0); also the stacking context for HUD scrims. */
+#app {
   position: absolute;
-  top: 8px;
-  left: 8px;
-  font: 600 14px var(--font-num);
-  color: #fff;
-  text-shadow: 0 1px 3px #000;
+  z-index: 1;
+  inset: 0;
 }
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+.counter {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+
+.btn {
+  --btn-bg: linear-gradient(180deg, rgba(44, 56, 104, 0.95), rgba(22, 28, 58, 0.95));
+  --btn-ink: var(--ink);
+  --btn-edge: var(--line-hi);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
+  min-height: 48px;
+  padding: 0 20px;
+  border: 0;
+  font: 700 17px / 1 var(--font-ui);
+  letter-spacing: 0.02em;
+  color: var(--btn-ink);
+  background: var(--btn-bg);
+  clip-path: var(--chamfer);
+  box-shadow:
+    inset 0 0 0 1px var(--btn-edge),
+    inset 0 -4px 0 rgba(0, 0, 0, 0.32);
+  cursor: pointer;
+  pointer-events: auto;
+  transition:
+    transform 0.12s var(--out),
+    filter 0.12s;
+}
+.btn:active {
+  transform: translateY(2px) scale(0.98);
+  box-shadow:
+    inset 0 0 0 1px var(--btn-edge),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.32);
+}
+.btn:focus-visible {
+  outline: none;
+  box-shadow:
+    inset 0 0 0 2px #fff,
+    inset 0 -4px 0 rgba(0, 0, 0, 0.32);
+}
+.btn:disabled,
+.btn.off {
+  filter: saturate(0.2) brightness(0.7);
+}
+.btn:disabled {
+  cursor: default;
+}
+.btn.go {
+  --btn-bg: linear-gradient(180deg, #7ff0ff, var(--cyan));
+  --btn-ink: #03151c;
+  --btn-edge: rgba(255, 255, 255, 0.5);
+}
+.btn.buy {
+  --btn-bg: linear-gradient(180deg, #ffe27a, var(--gold));
+  --btn-ink: #221a00;
+  --btn-edge: rgba(255, 255, 255, 0.5);
+}
+.btn.danger {
+  --btn-bg: linear-gradient(180deg, #ff7189, var(--red));
+  --btn-ink: #22040b;
+  --btn-edge: rgba(255, 255, 255, 0.4);
+}
+.btn.ghost {
+  --btn-bg: rgba(14, 18, 38, 0.72);
+  --btn-edge: var(--line);
+  font-weight: 600;
+}
+.btn.big {
+  min-height: 58px;
+  font-size: 20px;
+  padding: 0 28px;
+}
+.btn.small {
+  min-height: 44px;
+  padding: 0 14px;
+  font-size: 15px;
+}
+.btn b {
+  font-family: var(--font-num);
+  font-size: 1.15em;
+}
+@media (hover: hover) {
+  .btn:hover {
+    filter: brightness(1.15);
+  }
+}
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border: 0;
+  background: rgba(255, 255, 255, 0.06);
+  clip-path: var(--chamfer);
+  --cut: 8px;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.icon-btn:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px #fff;
+}
+
+/* ── Panels & shared bits ────────────────────────────────────────────────── */
+
+.panel {
+  background: var(--panel-solid);
+  clip-path: var(--chamfer);
+  box-shadow: inset 0 0 0 1px var(--line);
+  --cut: 14px;
+}
+
+.money {
+  font-family: var(--font-num);
+  font-weight: 700;
+  color: var(--gold);
+  text-shadow: 0 0 14px rgba(255, 210, 63, 0.35);
+}
+
+.hp-pips {
+  display: inline-flex;
+  gap: 4px;
+  filter: drop-shadow(0 0 5px rgba(108, 240, 194, 0.55));
+}
+.hp-pips i {
+  width: 15px;
+  height: 17px;
+  background: rgba(108, 240, 194, 0.16);
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+}
+.hp-pips i.on {
+  background: var(--green);
+}
+.hp-pips.low {
+  filter: drop-shadow(0 0 6px rgba(255, 77, 109, 0.8));
+}
+.hp-pips.low i.on {
+  background: var(--red);
+  animation: low-hp 0.8s ease-in-out infinite;
+}
+@keyframes low-hp {
+  50% {
+    opacity: 0.45;
+  }
+}
+@keyframes hp-bump {
+  0% {
+    transform: scale(1.35);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+.constraint-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 6px;
+  font: 600 13px / 1.2 var(--font-ui);
+  color: #ffd0d8;
+  background: rgba(255, 77, 109, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 77, 109, 0.5);
+  clip-path: var(--chamfer);
+  --cut: 6px;
+}
+.constraint-chip b {
+  color: var(--red);
+  font-size: 1.15em;
+}
+
+/* Description markup (see ui/markup.ts). */
+.mk-m,
+.mk-b,
+.mk-money,
+.mk-k,
+.mk-g {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.mk-m {
+  color: var(--red);
+}
+.mk-b {
+  color: var(--blue);
+}
+.mk-money {
+  color: var(--gold);
+  font-family: var(--font-num);
+  font-size: 1.08em;
+}
+.mk-k {
+  color: #a8eeff;
+}
+.mk-g {
+  color: var(--red);
+  font-style: italic;
+}
+.mk-x {
+  display: inline-block;
+  padding: 0 5px;
+  margin: 0 1px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--red);
+  border-radius: 3px;
+  white-space: nowrap;
+  line-height: 1.35;
+}
+
+/* ── Toast ───────────────────────────────────────────────────────────────── */
+
+.toast {
+  position: absolute;
+  z-index: 50;
+  left: 50%;
+  top: calc(var(--safe-top) + 74px);
+  max-width: calc(100% - 32px);
+  padding: 10px 18px;
+  font: 700 15px / 1.3 var(--font-ui);
+  text-align: center;
+  color: var(--ink);
+  background: rgba(10, 13, 28, 0.94);
+  box-shadow: inset 0 0 0 1px var(--line-hi);
+  clip-path: var(--chamfer);
+  --cut: 8px;
+  translate: -50% 0;
+  animation: toast-in 2.2s var(--out) both;
+  pointer-events: none;
+}
+@keyframes toast-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.9);
+  }
+  8% {
+    opacity: 1;
+    transform: translateY(0) scale(1.04);
+  }
+  14%,
+  85% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
 .boot-error {
   position: absolute;
   inset: 0;

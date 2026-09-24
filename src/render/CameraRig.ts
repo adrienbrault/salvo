@@ -20,6 +20,8 @@ export class CameraRig {
   readonly camera: PerspectiveCamera;
   /** Tilt from vertical, radians. */
   tilt = 0.4;
+  /** Player setting: screen-shake amplitude (0 = off, 1 = default). */
+  shakeScale = 1;
   private dist = 200;
   private targetY = 0;
   private trauma = 0;
@@ -118,7 +120,7 @@ export class CameraRig {
     this.trauma = Math.max(0, this.trauma - dt * 1.4);
     this.punch = Math.max(0, this.punch - dt * 3.5);
     this.sway += (playerX * 0.07 - this.sway) * Math.min(1, dt * 3);
-    const shake = this.trauma * this.trauma;
+    const shake = this.trauma * this.trauma * this.shakeScale;
     const n = (f: number, o: number) =>
       Math.sin(this.t * f + o) * 0.6 + Math.sin(this.t * f * 2.13 + o * 1.7) * 0.4;
     const ox = this.sway + shake * 3.2 * n(37, 0);

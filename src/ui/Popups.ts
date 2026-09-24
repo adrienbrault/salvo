@@ -1,5 +1,6 @@
 import { Vector2 } from 'three/webgpu';
 import type { FxEvent } from '../sim/types';
+import { fmt, fmtMult } from './format';
 
 const POOL = 28;
 const _s = new Vector2();
@@ -8,17 +9,8 @@ export interface WorldToScreen {
   worldToScreen(x: number, y: number, z: number, out: Vector2): Vector2;
 }
 
-export const fmt = (n: number): string => {
-  if (n >= 1e9) return `${(n / 1e9).toFixed(2)}G`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
-  return Math.round(n).toLocaleString('fr-FR');
-};
-
-export const fmtMult = (m: number): string =>
-  m >= 100 ? m.toFixed(0) : m >= 10 ? m.toFixed(1) : m.toFixed(2);
-
 /**
- * Balatro-style floating numbers over kills: blue Éclats × red Mult, the total punching in.
+ * Balatro-style floating numbers over kills: blue Shards × red Mult, the total punching in.
  * Imperative DOM pool (no framework per frame) positioned by projecting world coordinates.
  */
 export class Popups {
@@ -69,7 +61,7 @@ export class Popups {
       } else if (e.t === 'money') {
         this.spawn(e.x, e.y + 6, `+$${e.amount}`, 'money', cam);
       } else if (e.t === 'heal') {
-        this.spawn(e.x, e.y + 6, '+1 PV', 'heal', cam);
+        this.spawn(e.x, e.y + 6, '+1 HP', 'heal', cam);
       }
     }
   }

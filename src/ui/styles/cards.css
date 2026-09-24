@@ -1,0 +1,310 @@
+/* Item cards and item detail panels. Rarity tints the frame; the item color lights the glyph. */
+
+.r-common {
+  --rar: #9aa7c7;
+}
+.r-rare {
+  --rar: #b98cff;
+}
+.r-legendary {
+  --rar: #ffd23f;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding-top: 12px;
+}
+
+.card {
+  --c: var(--cyan);
+  --rx: 0deg;
+  --ry: 0deg;
+  --lift: 0px;
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 5 / 7;
+  padding: 0;
+  border: 0;
+  background: none;
+  container-type: inline-size;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: perspective(700px) translateY(var(--lift)) rotateX(var(--rx)) rotateY(var(--ry));
+  transition:
+    transform 0.3s var(--out),
+    filter 0.2s;
+  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.55));
+  animation:
+    card-in 0.55s var(--pop) var(--delay, 0ms) both,
+    card-float 5.5s ease-in-out calc(var(--delay, 0ms) * 4) infinite;
+}
+
+.card-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 17cqi 7cqi 10cqi;
+  overflow: hidden;
+  background:
+    radial-gradient(90% 60% at 50% 45%, color-mix(in srgb, var(--c) 26%, transparent), transparent 70%),
+    linear-gradient(180deg, #1b2244, #0b0f22);
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, var(--rar) 75%, transparent),
+    inset 0 0 22px rgba(0, 0, 0, 0.5);
+  clip-path: var(--chamfer);
+  --cut: 12cqi;
+}
+.card-face.no {
+  animation: card-no 0.42s ease-out;
+}
+.card-kind {
+  font: 600 9cqi / 1 var(--font-ui);
+  color: var(--rar);
+  letter-spacing: 0.03em;
+}
+.card-glyph {
+  font: 700 36cqi / 1 var(--font-ui);
+  color: var(--c);
+  text-shadow: 0 0 5cqi color-mix(in srgb, var(--c) 80%, transparent);
+}
+.card-name {
+  min-height: 2.3em;
+  display: flex;
+  align-items: flex-end;
+  font: 700 11cqi / 1.12 var(--font-ui);
+  text-align: center;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+/* Legendary foil: a holographic sheen that follows the tilt. */
+.r-legendary .card-face::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 25%,
+    rgba(255, 110, 220, 0.3) 38%,
+    rgba(110, 230, 255, 0.3) 50%,
+    rgba(255, 240, 130, 0.26) 62%,
+    transparent 75%
+  );
+  background-size: 260% 100%;
+  background-position: var(--gx, 50%) 0;
+  mix-blend-mode: color-dodge;
+  animation: foil 5s linear infinite;
+}
+.r-rare .card-face {
+  background:
+    radial-gradient(90% 60% at 50% 45%, color-mix(in srgb, var(--c) 26%, transparent), transparent 70%),
+    linear-gradient(180deg, #221c46, #0d0b24);
+}
+
+.price-tag {
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  translate: -50% 0;
+  padding: 4px 10px 3px;
+  font: 700 17px / 1 var(--font-num);
+  color: #221a00;
+  background: var(--gold);
+  clip-path: var(--chamfer);
+  --cut: 5px;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.2);
+}
+
+.card.selected {
+  --lift: -10px;
+  filter: drop-shadow(0 0 14px color-mix(in srgb, var(--c) 70%, transparent))
+    drop-shadow(0 12px 14px rgba(0, 0, 0, 0.6));
+}
+.card.selected .card-face {
+  box-shadow:
+    inset 0 0 0 2.5px #fff,
+    inset 0 0 22px rgba(0, 0, 0, 0.4);
+}
+.card.dim .card-face {
+  filter: saturate(0.35) brightness(0.72);
+}
+.card.dim .price-tag {
+  color: rgba(255, 210, 63, 0.9);
+  background: #4a3d10;
+}
+.card:focus-visible {
+  outline: none;
+}
+.card:focus-visible .card-face {
+  box-shadow:
+    inset 0 0 0 2.5px var(--cyan),
+    inset 0 0 22px rgba(0, 0, 0, 0.4);
+}
+@media (hover: hover) {
+  .card:hover {
+    --lift: -6px;
+  }
+  .card.selected:hover {
+    --lift: -10px;
+  }
+}
+
+.card-sold {
+  display: grid;
+  place-items: center;
+  cursor: default;
+  filter: none;
+  border: 1.5px dashed rgba(140, 170, 255, 0.2);
+  border-radius: 4px;
+  font: 600 13px var(--font-ui);
+  color: var(--dim);
+  animation: sold-in 0.4s var(--pop) both;
+  transform: none;
+}
+
+/* ── Detail ──────────────────────────────────────────────────────────────── */
+
+.detail {
+  --c: var(--cyan);
+  --rar: #9aa7c7;
+  padding: 14px 16px 16px;
+  background: var(--panel-solid);
+  box-shadow:
+    inset 0 0 0 1px var(--line-hi),
+    inset 0 3px 0 color-mix(in srgb, var(--c) 70%, transparent);
+  clip-path: var(--chamfer);
+  --cut: 14px;
+}
+.detail-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.detail-glyph {
+  width: 44px;
+  flex: none;
+  font: 700 34px / 1 var(--font-ui);
+  text-align: center;
+  color: var(--c);
+  text-shadow: 0 0 14px color-mix(in srgb, var(--c) 70%, transparent);
+}
+.detail-title {
+  flex: 1;
+  min-width: 0;
+}
+.detail-title h3 {
+  font: 700 20px / 1.15 var(--font-ui);
+}
+.detail-meta {
+  display: flex;
+  gap: 10px;
+  margin-top: 2px;
+  font: 600 13px / 1.2 var(--font-ui);
+  color: var(--muted);
+}
+.detail-meta .rarity {
+  color: var(--rar);
+}
+.detail-desc {
+  margin-top: 10px;
+  font: 400 16px / 1.45 var(--font-ui);
+  color: #d8def4;
+}
+.detail-note {
+  margin-top: 8px;
+  font: 600 14px / 1.35 var(--font-ui);
+  color: #a8eeff;
+}
+.detail-flavor {
+  margin-top: 8px;
+  font: 400 14px / 1.35 var(--font-ui);
+  font-style: italic;
+  color: var(--muted);
+}
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.detail-actions .btn {
+  flex: 1 1 auto;
+}
+.detail-actions .btn.small {
+  flex: 0 0 52px;
+}
+.detail-warn {
+  flex-basis: 100%;
+  font: 600 14px / 1.3 var(--font-ui);
+  color: #ff9fb0;
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    scale: 0.55;
+    rotate: -7deg;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+    rotate: 0deg;
+  }
+}
+@keyframes card-float {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -4px;
+  }
+}
+@keyframes card-no {
+  0%,
+  100% {
+    transform: none;
+  }
+  20% {
+    transform: translateX(-8px) rotate(-2deg);
+  }
+  45% {
+    transform: translateX(7px) rotate(2deg);
+  }
+  70% {
+    transform: translateX(-4px);
+  }
+}
+@keyframes foil {
+  to {
+    background-position: -160% 0;
+  }
+}
+@keyframes sold-in {
+  from {
+    opacity: 0;
+    scale: 1.2;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    animation: none;
+    transform: none;
+  }
+  .card-face.no,
+  .r-legendary .card-face::before {
+    animation: none;
+  }
+}

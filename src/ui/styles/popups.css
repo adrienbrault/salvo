@@ -1,0 +1,118 @@
+/* Floating kill scores (ui/Popups.ts): blue Shards × red Mult, then the total punching in. */
+
+.popups {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.popup {
+  position: absolute;
+  left: 0;
+  top: 0;
+  translate: -50% -100%;
+  opacity: 0;
+  white-space: nowrap;
+  text-align: center;
+  font: 700 12px / 1 var(--font-num);
+  color: var(--ink);
+  text-shadow:
+    0 1px 0 #000,
+    0 0 6px rgba(0, 0, 0, 0.85);
+  will-change: transform, opacity;
+}
+
+.popup.score,
+.popup.money,
+.popup.heal {
+  animation: popup-float 0.9s var(--out) forwards;
+}
+
+.popup .c {
+  color: var(--blue);
+}
+.popup .m {
+  color: var(--red);
+}
+.popup span {
+  margin: 0 1px;
+  color: var(--muted);
+}
+.popup i {
+  margin-left: 3px;
+  font-style: normal;
+  color: var(--gold);
+}
+.popup em {
+  display: block;
+  margin-top: 1px;
+  font-style: normal;
+  font-size: 18px;
+  color: #fff;
+}
+
+.popup.score.big {
+  font-size: 14px;
+  animation: popup-big 1.25s var(--out) forwards;
+}
+.popup.score.big em {
+  font-size: 26px;
+  color: var(--gold);
+  text-shadow:
+    0 1px 0 #000,
+    0 0 12px rgba(255, 210, 63, 0.6);
+}
+
+.popup.money {
+  font-size: 18px;
+  color: var(--gold);
+}
+.popup.heal {
+  font-size: 16px;
+  color: var(--green);
+}
+
+@keyframes popup-float {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.5);
+  }
+  12% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.14);
+  }
+  24% {
+    transform: translateY(-6px) scale(1);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-30px) scale(0.92);
+  }
+}
+
+@keyframes popup-big {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) rotate(-8deg);
+  }
+  10% {
+    opacity: 1;
+    transform: scale(1.35) rotate(3deg);
+  }
+  22% {
+    transform: scale(1) rotate(-1deg);
+  }
+  75% {
+    opacity: 1;
+    transform: translateY(-18px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-40px) scale(0.9);
+  }
+}

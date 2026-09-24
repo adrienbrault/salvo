@@ -1,28 +1,68 @@
+import { effect } from '@preact/signals';
 import { render } from 'preact';
+import { Vector2 } from 'three/webgpu';
 import { Game } from './app/Game';
 import { Loop } from './app/Loop';
-import { browserStore, loadSettings } from './app/save';
+import { browserStore, loadSettings, saveSettings } from './app/save';
 import { Audio } from './audio/Audio';
 import { InputController } from './input/Input';
 import { GameRenderer } from './render/GameRenderer';
 import type { Tier } from './render/quality';
+import { FIELD } from './sim/constants';
 import { App } from './ui/App';
+import { bindGame } from './ui/game';
 import { Popups } from './ui/Popups';
 import { ui } from './ui/store';
 
 declare global {
   interface Window {
-    salvo?: { game: Game; gr: GameRenderer };
+    salvo?: { game: Game; gr: GameRenderer; ui: typeof ui };
   }
+}
+
+/**
+ * HUD layout contract with `src/ui/styles/hud.css`: at aspect ≥ 11/10 the HUD sits in side
+ * columns beside the field, otherwise in a top band (HUD_TOP) and a bottom band (HUD_BOTTOM).
+ */
+const WIDE_ASPECT = 1.1;
+const HUD_TOP = 62;
+const HUD_BOTTOM = 92;
+
+/** Safe-area insets in CSS px (`env()` is only observable through layout). */
+function safeArea(): { top: number; bottom: number } {
+  const probe = document.createElement('div');
+  probe.style.cssText =
+    'position:fixed;visibility:hidden;pointer-events:none;' +
+    'padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)';
+  document.body.appendChild(probe);
+  const cs = getComputedStyle(probe);
+  const r = { top: Number.parseFloat(cs.paddingTop) || 0, bottom: Number.parseFloat(cs.paddingBottom) || 0 };
+  probe.remove();
+  return r;
 }
 
 /** Space the HUD needs above/below the playfield, in CSS px. */
 function insetsFor(w: number, h: number): { top: number; bottom: number } {
-  const portrait = h > w;
-  return portrait ? { top: 74, bottom: 18 } : { top: 64, bottom: 12 };
+  const safe = safeArea();
+  if (w / h >= WIDE_ASPECT) return { top: 14 + safe.top, bottom: 14 + safe.bottom };
+  return { top: HUD_TOP + safe.top, bottom: HUD_BOTTOM + safe.bottom };
+}
+
+/** Publishes the playfield's on-screen bounds as CSS variables so the HUD can hug it. */
+function publishField(gr: GameRenderer, el: HTMLElement): void {
+  const p = new Vector2();
+  // The near (bottom) edge is the widest on screen because of the camera tilt.
+  gr.rig.worldToScreen(-FIELD.halfW, -FIELD.halfH, 0, p);
+  el.style.setProperty('--field-l', `${Math.round(p.x)}px`);
+  el.style.setProperty('--field-b', `${Math.round(p.y)}px`);
+  gr.rig.worldToScreen(FIELD.halfW, -FIELD.halfH, 0, p);
+  el.style.setProperty('--field-r', `${Math.round(p.x)}px`);
+  gr.rig.worldToScreen(0, FIELD.halfH, 0, p);
+  el.style.setProperty('--field-t', `${Math.round(p.y)}px`);
 }
 
 async function boot(): Promise<void> {
+  const params = new URLSearchParams(location.search);
   const stage = document.getElementById('stage')!;
   const canvas = document.getElementById('gl') as HTMLCanvasElement;
   const uiRoot = document.getElementById('ui')!;
@@ -33,7 +73,6 @@ async function boot(): Promise<void> {
   const store = browserStore();
   const settings = loadSettings(store);
   ui.settings.value = settings;
-  const params = new URLSearchParams(location.search);
   const tierParam = params.get('tier') as Tier | null;
 
   render(<App />, appRoot);
@@ -65,12 +104,26 @@ async function boot(): Promise<void> {
   }
   const popups = new Popups(uiRoot);
   game = new Game(gr, input, audio, popups);
-  window.salvo = { game, gr };
+  bindGame(game);
+  window.salvo = { game, gr, ui };
+
+  effect(() => {
+    const s = ui.settings.value;
+    audio?.setVolume(s.volume, s.music);
+    input.setSensitivity(s.touchSensitivity);
+    gr.rig.shakeScale = s.shake;
+    saveSettings(store, s);
+  });
+  // Leaving the app mid-level (tab switch, phone call) pauses instead of resuming blind.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) game?.togglePause(true);
+  });
 
   const onResize = () => {
     const w = stage.clientWidth;
     const h = stage.clientHeight;
     gr.resize(w, h, insetsFor(w, h));
+    publishField(gr, uiRoot);
   };
   new ResizeObserver(onResize).observe(stage);
   onResize();

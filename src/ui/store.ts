@@ -1,9 +1,13 @@
 import { signal } from '@preact/signals';
 import type { LevelReport } from '../run/run';
 import type { RunState } from '../run/state';
+import type { ConstraintId } from '../sim/constraints';
 import type { LevelTally } from '../sim/world';
 
 export type Screen = 'boot' | 'title' | 'chassis' | 'map' | 'level' | 'recap' | 'shop' | 'over' | 'victory';
+
+/** Overlay panels that can open above any screen. */
+export type Modal = 'settings' | 'records' | 'build';
 
 export interface HudState {
   score: number;
@@ -26,7 +30,7 @@ export interface HudState {
   maxCharges: number;
   stored: number;
   blackout: boolean;
-  constraint: string | null;
+  constraint: ConstraintId | null;
 }
 
 export const emptyHud = (): HudState => ({
@@ -76,6 +80,7 @@ export const defaultSettings = (): Settings => ({
 export const ui = {
   screen: signal<Screen>('boot'),
   paused: signal(false),
+  modal: signal<Modal | null>(null),
   run: signal<RunState | null>(null),
   runVersion: signal(0),
   hud: signal<HudState>(emptyHud()),
